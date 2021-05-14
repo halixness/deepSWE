@@ -1,0 +1,78 @@
+#!/bin/sh
+
+maindir=$1/mini
+
+# Crea maindir se non esiste
+if [ ! -d $maindir ] 
+then
+	mkdir $maindir
+	echo Main dir $maindir created...
+fi
+
+# Dir
+cd $1/decoded
+
+# Params
+xstart=$2
+xend=$3
+ystart=$4
+yend=$5
+
+width=$((xend - xstart))
+height=$((yend - ystart))
+step=256
+skip=25
+
+# Blocks = (w,h) / step
+xblocks=$((width/step))
+yblocks=$((height/step))
+
+echo Cutting in $yblocks x $xblocks blocks...
+
+for (( y=1; y<=$yblocks; y+= 1)); do
+	for (( x=1; x<=$xblocks; x+= 1)); do
+		
+		xmin=$((1 + xstart + (x-1) * step))
+		xmax=$((xmin + step - 1))
+
+		ymin=$((1 + ystart + (y-1) * step))
+		ymax=$((ymin+step - 1))
+
+		destdir="../mini/mini-$xmin-$xmax-$ymin-$ymax"
+
+		# Crea dir se non esiste
+		if [ ! -d $destdir ] 
+		then
+			mkdir $destdir
+		fi
+
+		echo Size is: $((xmax-xmin+1))'x'$((ymax-ymin+1))
+
+		# Print file
+		x=0
+		len=$(ls -lR *.DEP | wc -l)
+
+		# --- BTM
+		#cat decoded-last.BTM | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/mini-decoded-last.BTM; 
+
+		# --- DEP
+		# for file in *.DEP; do cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/$file; done
+			
+		for file in *.DEP; do 
+		
+			j=$(printf "%04d" $x)
+
+			cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/mini-decoded-$j.DEP; 
+			x=$((x + skip))
+
+			if [[ $x -ge $len ]]; then
+				break
+			fi
+
+		done
+
+		echo [!] Area $y-$x done!
+	done
+done
+
+cd ..

@@ -1,0 +1,77 @@
+import numpy as np
+import argparse
+import os
+import sys
+import time
+
+#import matplotlib
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
+
+from subprocess import call
+
+from multiprocessing import Pool, Process, Manager
+from datetime import datetime, timedelta
+
+def txt_to_matrix(filename, line_skip = 5):
+    f = open (filename, 'r')
+    
+    # Lineskip, cleaning, conversion
+    data = f.readlines()[line_skip:]
+    
+    data = np.asarray(
+        [l.replace("\n", "").split() for l in data]
+    ).astype(np.float32)
+    
+    data[data > 100] = 0
+    
+    return data
+
+#---- Args
+if len(sys.argv) <= 1:
+	print("Inserire nome file")
+	exit()
+
+fold =  sys.argv[1]
+
+
+num =  int(len(os.listdir(fold + "/decoded/")) / 2)
+
+file =  fold + "/decoded/decoded-{:04d}.DEP".format(num)
+print("Reading {}....".format(file))
+
+
+#---- Get data
+region = txt_to_matrix(file, line_skip = 5)
+
+print("Computing convolutions...")
+
+stride = 35
+size = 256
+offset = 5
+
+empty_tresh = 1e-1
+considerable_tresh = 0.1 * (size**2)
+
+valid_areas = []
+
+for y in range(offset, region.shape[1] - size, stride):
+    for x in range(0, region.shape[0] - size, stride):
+        
+        area = region[y:y+size, x:x+size]
+        
+        valid_area = area[area > empty_tresh].flatten().shape[0]
+        
+        # se celle oltre 10%
+        if considerable_tresh < valid_area: 
+        
+            valid_areas.append((y, x))
+
+            print("Found valid area in {}-{}".format(y, x))
+            
+        del area
+        del valid_area
+
+# Esegui cut per ogni area valida
+for area in valid_areas:
+    call("./bulk-cut {} {} {} {} {}".format(fold, area[1], area[1] + size, area[0], area[0] + size), shell=True)

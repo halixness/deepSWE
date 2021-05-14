@@ -1,0 +1,65 @@
+#!/bin/sh
+ 
+#!/bin/bash
+#SBATCH --job-name=SWE_full_sim
+#SBATCH --output=%x.o%j
+#SBATCH --error=%x.e%j
+#SBATCH --nodes=1
+#SBATCH --tasks-per-node=2
+#SBATCH --gres=gpu:a100:2
+#SBATCH --partition=gpu
+#SBATCH --mem=64G
+#SBATCH --time=23:00:00
+
+filename="Arda_diga_cortemaggiore_V00-output-"
+filename_init="Arda_diga_cortemaggiore_V00-INITIAL"
+input="input_Arda_diga_cortemaggiore_V00.txt"
+folder="output_$(date '+%Y_%m_%d_%H%M')"
+
+# Selezione ozioni
+#if [ $1 -eq 0 ] || [ $2 -eq 0 ] || [ $3 -eq 0 ] || [ $4 -eq 0 ]
+#  then
+#    echo Specificare un range...
+#    exit
+#fi
+
+# Clean
+rm -rf $folder
+mkdir $folder
+mkdir $folder/simulation
+mkdir $folder/decoded
+
+#---------- Simulazione
+./swegpu $input -order=1 -gpu=0 -multi=hi > "$folder/output_$(date '+%Y-%m-%d').txt"
+
+mv $filename* $folder/simulation/
+mv $filename_init* $folder/simulation/
+
+#---------- Decode
+last=$(ls $folder/simulation/| grep -v LAST | grep ".DEP" | tail -1 | awk -F'-' '{print $NF}' | awk -F'.' '{print $1}')
+
+resolution=1
+
+# DEP
+./swegpu -decode $folder/simulation/"${filename}0000.DEP" $folder/decoded/decoded -all -frames 0 $last -binary=0 -res=$resolution
+
+# BTM
+./swegpu -decode $folder/simulation/"${filename}LAST.BTM" $folder/decoded/decoded-last.BTM -all -binary=0 -res=$resolution
+
+./swegpu -decode Baganza_cassa-TAV_V00.BTM decoded-last.BTM -all -binary=0 -res=1
+
+# WSE
+#./swegpu -decode $folder/simulation/"${filename}0000.WSE" $folder/decoded/decoded -all -frames 0 $last -binary=0 -res=$resolution
+
+# VVX
+#./swegpu -decode $folder/simulation/"${filename}0000.VVX" $folder/decoded/decoded -all -frames 0 $last -binary=0 -res=$resolution
+
+# VVY
+#./swegpu -decode $folder/simulation/"${filename}0000.VVY" $folder/decoded/decoded -all -frames 0 $last -binary=0 -res=$resolution
+
+module load miniconda3
+source "$CONDA_PREFIX/etc/profile.d/conda.sh" 
+conda activate machine-learning-cuda-10.1
+
+#---------- Convoluzione per selezione aree + cut 
+python conv-cut $folder
