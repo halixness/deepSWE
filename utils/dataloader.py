@@ -1,17 +1,17 @@
-import tensorflow as tf
 import numpy as np
 import os
 from tqdm import tqdm
+import random
+
 
 class DataPartitions():
-    def __init__(self, past_frames, future_frames, root, partial = None):
+    def __init__(self, past_frames, future_frames, root, partial=None):
 
         self.root = root
         self.past_frames = past_frames
         self.future_frames = future_frames
 
-        self.train_dataset_partitions = []
-        self.test_dataset_partitions = []
+        self.dataset_partitions = []
         self.areas = []
         self.partial = partial
 
@@ -23,77 +23,62 @@ class DataPartitions():
 
         return self.areas
 
-    def get_train(self):
-        ''' Returns train dataset partitions
-            Partitions: [(ids_x(x, 10), ids_y(x, 4))]
-        '''
-
-        return self.train_dataset_partitions
-
-    def get_test(self):
+    def get_partitions(self):
         ''' Returns test dataset partitions
             Partitions: [(ids_x(x, 10), ids_y(x, 4))]
         '''
 
-        return self.test_dataset_partitions
+        return self.dataset_partitions
 
     def create_partitions(self):
-        ''' Creates the keras.DataLoader partitions (input-label) 
+        ''' Creates the keras.DataLoader partitions (input-label)
             - file format: mini-xxxx.DEP/VVX/VVY/BTM
         '''
 
-        self.areas =  os.listdir(self.root)
-        self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root +  x)]
-        
+        self.areas = os.listdir(self.root)
+        self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
+        # self.areas = ["mini-211-466-421-676"]
+
         if self.partial is not None:
-            self.areas = self.areas[:int(len(self.areas)*self.partial)]
+            self.areas = self.areas[:int(len(self.areas) * self.partial)]
 
         if len(self.areas) <= 0:
             raise Exception("Nessuna cartella area valida trovata.")
 
         # Applica intervalli di interesse
         for area in self.areas:
-            
+
             n_frames = len([x for x in os.listdir(self.root + area) if x.endswith(".DEP")])
 
             # Fino ai frame che interessano
             size = n_frames - self.past_frames - self.future_frames
-            train_len = size # train test split sulle aree, non sulle sequenze temporali
-            
+
             partition_raw = []
             labels = dict()
-            
-            #-----------
+
+            # -----------
             for i in range(size):
                 partition_raw.append("id-{}".format(i))
-                labels["id-{}".format(i)] = list(range(i + (self.past_frames), i + (self.past_frames) + (self.future_frames))) 
-            
-            self.train_dataset_partitions.append((partition_raw, labels))
+                labels["id-{}".format(i)] = list(
+                    range(i + (self.past_frames), i + (self.past_frames) + (self.future_frames)))
 
-            #-----------
-            partition_raw = []
-            labels = dict()
+            # folder_name, x_frame_id, y_frames_id
+            self.dataset_partitions.append((area, partition_raw, labels))
 
-            # i: local partition index
-            # j: frame index in the area folder
-            for i, j in enumerate(range(train_len, size)):
-                partition_raw.append("id-{}".format(i))
-                labels["id-{}".format(i)] = list(range(j + (self.past_frames), j + (self.past_frames) + (self.future_frames)))
-
-            self.test_dataset_partitions.append((partition_raw, labels))
 
 # ------------------------------------------------------------------------------
-class DataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, root, filenames, dataset_partitions, past_frames, future_frames, input_dim,  output_dim, buffer_memory = 1, buffer_size = 100, batch_size=16, n_channels=1, shuffle=True):
+class DataGenerator():
+    def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
+                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, shuffle=True):
         '''
             Data Generator
-            Inputs:  
-                
+            Inputs:
+
                 - Path containing folders of frames
                 - List of the names of these folders
                 - Partitions: [(ids_x(x, 10), ids_y(x, 4))]
-  
-            TODO: 
+
+            TODO:
                 [x] Implementare https://it.wikipedia.org/wiki/Memoria_virtuale#Seconda_scelta_(Algoritmo_dell'orologio)
                 [x] Implementare memory pre-loading per una dimensione consentita
                 [ ] Implementare smart reshape in base alle dimensioni fornite in input (einops?)
@@ -110,19 +95,51 @@ class DataGenerator(tf.keras.utils.Sequence):
         self.shuffle = shuffle
         self.past_frames = past_frames
         self.future_frames = future_frames
-        
+
         self.root = root
-        self.filenames = filenames
 
         self.buffer = []
         self.buffer_size = buffer_size
-        self.buffer_memory = buffer_memory 
+        self.buffer_memory = buffer_memory
+        self.buffer_hit_ratio = 0
 
         # Shuffle and initialize
-        self.on_epoch_end()
+        if self.shuffle:
+            self.shuffle_sequences()
+
+    def get_total_sequences(self):
+        ' Numero totale di sequenze frames '
+        return sum([len(a[1]) for a in self.dataset_partitions])
+
+    def __len__(self):
+        ' Numero totale di batches '
+        return  \
+            int(self.get_total_sequences() / self.batch_size) + (self.get_total_sequences() % self.batch_size)
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+
+        return self.__data_generation(index)
+
+    def shuffle_sequences(self):
+        ' Shuffle delle sequenze solo quando viene creato il dataloader '
+
+        # Shuffle sequenze esterne
+        random.shuffle(self.dataset_partitions)
+
+        # Shuffle sequenze interne
+        for i in range(len(self.dataset_partitions)):
+            n_sequences = list(range(len(self.dataset_partitions[i][1])))
+            random.shuffle(n_sequences)  # shuffle indici sequenze X (le Y dipendono dall'accesso alla X)
+            self.dataset_partitions[i] = (
+                self.dataset_partitions[i][0],
+                [self.dataset_partitions[i][1][x] for x in n_sequences],
+                self.dataset_partitions[i][2]
+            )
 
     def get_X(self):
-        num_batches = self.get_total_batches()
+        'Generates only the X split array'
+        num_batches = self.__len__()
         X = np.zeros((num_batches, self.batch_size, *self.input_dim))
 
         for i in tqdm(range(num_batches)):
@@ -132,7 +149,8 @@ class DataGenerator(tf.keras.utils.Sequence):
         return X
 
     def get_Y(self):
-        num_batches = self.get_total_batches()
+        'Generates only the Y split array'
+        num_batches = self.__len__()
         Y = np.zeros((num_batches, self.batch_size, *self.output_dim))
 
         for i in tqdm(range(num_batches)):
@@ -140,6 +158,132 @@ class DataGenerator(tf.keras.utils.Sequence):
             Y[i] = y
 
         return Y
+
+    def __data_generation(self, batch_index):
+        'Generates 1 batch with batch_size samples'
+
+        # stats
+        accesses = 0
+        hits = 0
+
+        # Initialization
+        X = np.empty((self.batch_size, *self.input_dim))
+        y = np.empty((self.batch_size, *self.output_dim))
+
+        seq_start = batch_index * self.batch_size
+
+        area_start = int(seq_start / len(self.dataset_partitions[0][1]))
+        seq_start = int(seq_start % len(self.dataset_partitions[0][1]))
+        cnt = self.batch_size
+
+        i = area_start
+        x = 0
+        # Dall'area di partenza
+        while i < len(self.dataset_partitions) and cnt > 0:
+
+            if i == area_start: j = seq_start
+            else: j = 0
+
+            # Dalla sequenza di partenza
+            while j < len(self.dataset_partitions[area_start][1]) and cnt > 0:
+
+                # --- BTM
+                #btm = np.loadtxt(self.root + self.dataset_partitions[i][0] + "/mini-decoded.BTM")
+                #btm.resize(btm.shape[0], btm.shape[1], 1)
+                #btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
+
+                deps = None
+                velocities = None
+
+                # Scorre frames nella sequenza
+                for k in range(j, j+self.past_frames+self.future_frames):
+
+                    # ---- DEP
+                    accesses += 1
+                    global_id = "1-{:04d}".format(i * self.batch_size + k) # indice linearizzato globale
+                    cache = self.buffer_lookup(
+                        global_id
+                    )
+                    if cache is False:
+                        frame = np.loadtxt(self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.DEP".format(k))
+                        self.buffer_push(global_id, frame)
+                    else:
+                        frame = cache
+                        hits += 1
+
+                    # ---- VVX
+                    accesses += 1
+                    global_id = "2-{:04d}".format(i * self.batch_size + k)  # indice linearizzato globale
+                    cache = self.buffer_lookup(
+                        global_id
+                    )
+                    if cache is False:
+                        vvx = np.loadtxt(
+                            self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.VVX".format(k))
+                        self.buffer_push(global_id, vvx)
+                    else:
+                        vvx = cache
+                        hits += 1
+
+                    # ---- VVY
+                    accesses += 1
+                    global_id = "2-{:04d}".format(i * self.batch_size + k)  # indice linearizzato globale
+                    cache = self.buffer_lookup(
+                        global_id
+                    )
+                    if cache is False:
+                        vvy = np.loadtxt(
+                            self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.VVY".format(k))
+                        self.buffer_push(global_id, vvy)
+                    else:
+                        vvy = cache
+                        hits += 1
+
+                    # ---
+                    velocity = np.sqrt(vvx ** 2 + vvy ** 2)
+
+                    if deps is None: deps = np.array([frame])
+                    else: deps = np.concatenate((deps, np.array([frame])))
+
+                    if velocities is None: velocities = np.array([velocity])
+                    else: velocities = np.concatenate((velocities, np.array([velocity])))
+
+                # ---------
+
+                deps[deps > 10e5] = 0
+                velocities[velocities > 10e5] = 0
+                #btm_x[btm_x > 10e5] = 0
+
+                # --- X
+                rx = deps[:self.past_frames]
+                rx.resize((rx.shape[0], rx.shape[1], rx.shape[2], 1))
+
+                rvx = velocities[:self.past_frames]
+                rvx.resize((rvx.shape[0], rvx.shape[1], rvx.shape[2], 1))
+
+                # x has 3 channels: dep, velocities, btm
+                #X[x, :, ] = np.concatenate((rx, rvx, btm_x), axis=3)
+                X[x, :, ] = np.concatenate((rx, rvx), axis=3)
+
+                # --- Y
+                ry = deps[self.past_frames:]
+                ry.resize((ry.shape[0], ry.shape[1], ry.shape[2], 1))
+                y[x, :, ] = ry # y has 1 channel: dep
+
+                # Scorre sequenza
+                cnt -= 1
+                j += 1
+                x += 1 # sequenza da zero
+
+            # Scorre area
+            i += 1
+
+        if accesses != 0:
+            self.buffer_hit_ratio = hits / accesses;
+
+        return X, y
+
+    # ------------------------------------
 
     def buffer_lookup(self, k):
         ''' Get sequence (datapoint) from cache given the start frame global id '''
@@ -149,11 +293,11 @@ class DataGenerator(tf.keras.utils.Sequence):
             if x["global_id"] == k:
                 self.buffer[i]["fresh"] += 1
                 return x["value"]
-            
+
             # Set any read record to 0 (second chance)
-            elif self.buffer[i]["fresh"] is not 0:
+            elif self.buffer[i]["fresh"] != 0:
                 self.buffer[i]["fresh"] -= 1
-        
+
         return False
 
     def buffer_push(self, k, x):
@@ -164,171 +308,6 @@ class DataGenerator(tf.keras.utils.Sequence):
                 if j["fresh"] == 0:
                     del self.buffer[i]
         # Push
-        self.buffer.append({'fresh': self.buffer_memory, 'global_id': k, 'value':x})
-
-        
-    def get_total_frames(self):
-        'Sum of #frames for each folder'
-        
-        total_frames = 0
-    
-        for p in self.dataset_partitions:
-            total_frames += len(p[0])
-        
-        return total_frames
-    
-    def get_total_batches(self):
-        'Sum of #batches for each folder'
-        
-        batches = 0
-        
-        # sum of batches per dataset
-        for p in self.dataset_partitions:
-            batches += int(np.floor(len(p[0]) / self.batch_size))
-            
-        return batches
-
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        
-        return self.get_total_batches()
+        self.buffer.append({'fresh': self.buffer_memory, 'global_id': k, 'value': x})
 
 
-    def __getitem__(self, index):
-        'Generate one batch of data'
-
-        # Seleziona un intervallo di frames in base all'indice batch
-        indexes = self.indexes[ index * self.batch_size : (index + 1) * self.batch_size]
-
-        # Generate data
-        X, y = self.__data_generation(indexes)
-
-        return X, y
-    
-    def on_epoch_end(self):
-        'Shuffles indexes for each epoch, determines total indexes'
-        
-        total_frames = self.get_total_frames()
-            
-        # Shuffle di tutti gli id frames globali (attinge da più datasets a random)
-        self.indexes = np.arange(total_frames)
-        
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-        
-    def get_dataset_id(self, index):
-        'Get #folder by #global_frame'
-        
-        curmax = 0
-        
-        # Get index of which dataset it belongs to
-        for i, p in enumerate(self.dataset_partitions):
-            curmax += len(p[0])
-            if index < curmax:
-                return i
-        return -1
-    
-    def get_local_id(self, global_id, dataset_id):
-        'Get #local_frame by #global_frame'
-        
-        # remove lens of all the previous ones
-        for i in range(dataset_id):
-            global_id -= len(self.dataset_partitions[i][0])
-        
-        return global_id
-        
-    
-    def __data_generation(self, list_IDs_temp):
-        'Generates data containing batch_size samples' 
-        
-        # Initialization
-        X = np.empty((self.batch_size, *self.input_dim))
-        y = np.empty((self.batch_size, *self.output_dim))
-
-        # Generate data for i IDs
-        # id: 0 +
-        for i, global_id in enumerate(list_IDs_temp):
-            
-            # Id dataset da cui attingere
-            # Id frame start nel dataset
-            dataset_id = self.get_dataset_id(global_id)
-            local_id = self.get_local_id(global_id, dataset_id)
-    
-            # -1 per il BTM che non conta
-            size = len([x for x in os.listdir(self.root + self.filenames[dataset_id]) if x.endswith(".DEP")])-1
-            
-            # Carica file BTM
-            btm = np.loadtxt(self.root + self.filenames[dataset_id] + "/mini-decoded.BTM")
-            btm.resize(btm.shape[0], btm.shape[1], 1)
-            
-            btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
-            
-            # Dalla cartella dataset scelta, leggo tutti i frames
-            deps = None
-            velocities = None
-            
-            # ------ DEP, Velocities train + pred
-            for j in range(size):
-                
-                # ----
-                i_frame = "1-{:04d}".format(global_id)
-                cache = self.buffer_lookup(i_frame)
-                
-                if cache is False:
-                    frame = np.loadtxt(self.root + self.filenames[dataset_id] + "/mini-decoded-{:04d}.DEP".format(j))
-                    self.buffer_push(i_frame, frame)
-                else:
-                    frame = cache
-
-                # ----
-                i_vvx = "2-{:04d}".format(global_id)
-                cache = self.buffer_lookup(i_vvx)
-                
-                if cache is False:
-                    vvx = np.loadtxt(self.root + self.filenames[dataset_id] + "/mini-decoded-{:04d}.VVX".format(j))
-                    self.buffer_push(i_vvx, vvx)
-                else:
-                    vvx = cache
-
-                 # ----
-                i_vvy = "3-{:04d}".format(global_id)
-                cache = self.buffer_lookup(i_vvy)
-                
-                if cache is False:
-                    vvy = np.loadtxt(self.root + self.filenames[dataset_id] + "/mini-decoded-{:04d}.VVY".format(j))
-                    self.buffer_push(i_vvy, vvy)
-                else:
-                    vvy = cache
-
-                # ---
-                velocity = np.sqrt(vvx**2 + vvy**2)
-                
-                if deps is None: deps = np.array([frame])
-                else: deps = np.concatenate((deps, np.array([frame])))
-                    
-                if velocities is None: velocities = np.array([velocity])
-                else: velocities = np.concatenate((velocities, np.array([velocity])))
-                
-            deps[deps > 10e5] = 0
-            velocities[velocities > 10e5] = 0
-            
-            # partition[id] -> start position for train window
-            # ID
-            # channels, frames, height, width
-            r = deps[local_id: local_id + self.past_frames]
-            r.resize((r.shape[0], r.shape[1], r.shape[2], 1))
-            
-            r2 = velocities[local_id: local_id + self.past_frames]
-            r2.resize((r2.shape[0], r2.shape[1], r2.shape[2], 1))
-                        
-            # frame, channel, width, height
-            X[i, :,] = np.concatenate((r, r2, btm_x), axis=3)
-            
-            # labels[id] -> list of frame indices for predict window
-            r = deps[self.dataset_partitions[dataset_id][1]["id-{}".format(local_id)]]
-            r.resize((r.shape[0], r.shape[1], r.shape[2], 1))
-            
-            # we predict only DEP
-            y[i, :,] = r
-
-        return X, y
