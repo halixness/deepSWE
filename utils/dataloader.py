@@ -69,7 +69,7 @@ class DataPartitions():
 # ------------------------------------------------------------------------------
 class DataGenerator():
     def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
-                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, shuffle=True):
+                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, shuffle=True, deep_shuffle=True, caching=True):
         '''
             Data Generator
             Inputs:
@@ -77,11 +77,6 @@ class DataGenerator():
                 - Path containing folders of frames
                 - List of the names of these folders
                 - Partitions: [(ids_x(x, 10), ids_y(x, 4))]
-
-            TODO:
-                [x] Implementare https://it.wikipedia.org/wiki/Memoria_virtuale#Seconda_scelta_(Algoritmo_dell'orologio)
-                [x] Implementare memory pre-loading per una dimensione consentita
-                [ ] Implementare smart reshape in base alle dimensioni fornite in input (einops?)
         '''
 
         self.input_dim = input_dim
@@ -93,8 +88,10 @@ class DataGenerator():
 
         self.n_channels = n_channels
         self.shuffle = shuffle
+        self.deep_shuffle = shuffle and deep_shuffle
         self.past_frames = past_frames
         self.future_frames = future_frames
+        self.caching = caching
 
         self.root = root
 
@@ -128,14 +125,15 @@ class DataGenerator():
         random.shuffle(self.dataset_partitions)
 
         # Shuffle sequenze interne
-        for i in range(len(self.dataset_partitions)):
-            n_sequences = list(range(len(self.dataset_partitions[i][1])))
-            random.shuffle(n_sequences)  # shuffle indici sequenze X (le Y dipendono dall'accesso alla X)
-            self.dataset_partitions[i] = (
-                self.dataset_partitions[i][0],
-                [self.dataset_partitions[i][1][x] for x in n_sequences],
-                self.dataset_partitions[i][2]
-            )
+        if self.deep_shuffle:
+            for i in range(len(self.dataset_partitions)):
+                n_sequences = list(range(len(self.dataset_partitions[i][1])))
+                random.shuffle(n_sequences)  # shuffle indici sequenze X (le Y dipendono dall'accesso alla X)
+                self.dataset_partitions[i] = (
+                    self.dataset_partitions[i][0],
+                    [self.dataset_partitions[i][1][x] for x in n_sequences], # rialloca le sequenze X randomizzate
+                    self.dataset_partitions[i][2]
+                )
 
     def get_X(self):
         'Generates only the X split array'
@@ -185,7 +183,8 @@ class DataGenerator():
             else: j = 0
 
             # Dalla sequenza di partenza
-            while j < len(self.dataset_partitions[area_start][1]) and cnt > 0:
+            seq_len = len(self.dataset_partitions[area_start][1])
+            while j < seq_len and cnt > 0:
 
                 # --- BTM
                 #btm = np.loadtxt(self.root + self.dataset_partitions[i][0] + "/mini-decoded.BTM")
@@ -198,9 +197,11 @@ class DataGenerator():
                 # Scorre frames nella sequenza
                 for k in range(j, j+self.past_frames+self.future_frames):
 
+                    gid = i * self.batch_size * seq_len + k
+
                     # ---- DEP
                     accesses += 1
-                    global_id = "1-{:04d}".format(i * self.batch_size + k) # indice linearizzato globale
+                    global_id = "1-{:04d}".format(gid) # indice linearizzato globale
                     cache = self.buffer_lookup(
                         global_id
                     )
@@ -213,7 +214,7 @@ class DataGenerator():
 
                     # ---- VVX
                     accesses += 1
-                    global_id = "2-{:04d}".format(i * self.batch_size + k)  # indice linearizzato globale
+                    global_id = "2-{:04d}".format(gid)  # indice linearizzato globale
                     cache = self.buffer_lookup(
                         global_id
                     )
@@ -227,7 +228,7 @@ class DataGenerator():
 
                     # ---- VVY
                     accesses += 1
-                    global_id = "2-{:04d}".format(i * self.batch_size + k)  # indice linearizzato globale
+                    global_id = "2-{:04d}".format(gid)  # indice linearizzato globale
                     cache = self.buffer_lookup(
                         global_id
                     )
@@ -288,26 +289,29 @@ class DataGenerator():
     def buffer_lookup(self, k):
         ''' Get sequence (datapoint) from cache given the start frame global id '''
 
-        for i, x in enumerate(self.buffer):
-            # Returns found record
-            if x["global_id"] == k:
-                self.buffer[i]["fresh"] += 1
-                return x["value"]
+        if self.caching:
+            for i, x in enumerate(self.buffer):
+                # Returns found record
+                if x["global_id"] == k:
+                    self.buffer[i]["fresh"] += 1
+                    return x["value"]
 
-            # Set any read record to 0 (second chance)
-            elif self.buffer[i]["fresh"] != 0:
-                self.buffer[i]["fresh"] -= 1
+                # Set any read record to 0 (second chance)
+                elif self.buffer[i]["fresh"] != 0:
+                    self.buffer[i]["fresh"] -= 1
 
         return False
 
     def buffer_push(self, k, x):
         ''' Add sequence (datapoint) to cache with start frame global id '''
-        # Makes space
-        if len(self.buffer) >= self.buffer_size:
-            for i, j in enumerate(self.buffer):
-                if j["fresh"] == 0:
-                    del self.buffer[i]
-        # Push
-        self.buffer.append({'fresh': self.buffer_memory, 'global_id': k, 'value': x})
+
+        if self.caching:
+            # Makes space
+            if len(self.buffer) >= self.buffer_size:
+                for i, j in enumerate(self.buffer):
+                    if j["fresh"] == 0:
+                        del self.buffer[i]
+            # Push
+            self.buffer.append({'fresh': self.buffer_memory, 'global_id': k, 'value': x})
 
 

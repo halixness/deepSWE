@@ -1,0 +1,86 @@
+======= REFERENZE
+- https://github.com/Showmax/kinetics-downloader
+- https://github.com/CannyLab/tsne-cuda
+
+======= RAGIONAMENTO
+    - Normali AE hanno il problema di essere deterministici e approssimare i possibili outcome
+    - I VAE lavorano su variabili continue, ma non risolvono il problema: con A->B e A->C, la rete darà A->(B+C) senza capire un mapping unico
+        https://arxiv.org/pdf/1312.6114v10.pdf
+    - I VQ-VAE forse risolvono questo problema
+        https://arxiv.org/pdf/1711.00937v2.pdf
+    - Potrei usare l'attenzione almeno sul tempo?
+
+======= xx/04/2021 =======
+
+- Creato un dataloader per servire batch dinamicamente
+- Aggiunto il supporto di caricamento completo in ram del dataset
+- Aggiunto l'algoritmo Second Chance per minimizzare gli accessi da disco
+
+
+======= x1/05/2021 =======
+
+- Implementata la standardizzazione per canale del dataset in input
+- Passaggio Keras -> PyTorch per maggiore customizzazione e test di modelli esistenti
+- Valutazione del framework FLAX per futuro scaling up ad architettura tpu
+
+======= 13/05/2021 =======
+
+- Scelta di PyTorch come main framework al momento (maggiore familiarità, più referenze online)
+- Test della prima architettura: Autoencoder
+    - Bottleneck:   Resnet 64-128-256-512
+    - Decoder:      ConvTranspose3d + BatchNorm
+    - Osservazioni:
+        1) Il modello prevede degli output "sovrapposti" con intensità variabili, sembra essere segno del problema dei modelli deterministici
+        2) Testando con reti più profonde e più epochs, le previsioni sono più nitide, ma non si risolve il problema 1)
+        3) Bisogna verificare quando i frame cambiano molto tra di loro (al momento non sembra...)
+        4) Sembra che le previsioni del modello siano tutte molto simili tra di loro
+- Next TODO:
+    [x] Attenzione: partitions.get_train() va convertito in get_all, bisogna togliere train-test split da li!
+    [x] Capire meglio se per ogni datapoint c'è una significativa differenza tra frames, nel caso testare meglio con il simulatore nel cluster
+    [x] normalizzazione pericolosa per le velocità
+    [ ] Testare la rete con sequenze di frame che variano molto
+    [ ] Cercare di visualizzare lo spazio latente dell'autoencoder
+    [ ] prova data augmentation con rotazione delle immagini
+    [ ] capire k frame passato per ottenere un buon frame prossimo futuro
+    [ ] possibilmente passare a lettura on-the-fly da disco, dato che anche la normalizzazione è fatta con partial fit
+    [ ] migrare al cluster, adattare lo script per esecuzioni asincrone
+
+======= 16/05/2021 =======
+
+- Refactoring del dataloader
+    - Migliorato l'algoritmo di windowing: aumentati i frames utilizzabili
+    - Risolto il problema delle sequenze: ci sono differenze significative tra i frames in sequenza
+- Primo test DEP+VEL+BTM, (frame_past, frame_future):
+    - (4-6), (6, 2): risultati molto sfocati
+
+======= 17/05/2021 =======
+
+- Proseguimento del primo test
+    - Si nota una periodicità nella loss (picchi), da indagare
+
+======= 20/05/2021 =======
+
+- Secondo test DEP+VEL:
+    - La mappa BTM non è molto nitida, da capire se va bene (analizza)
+    - Cambia poco, molta sfocatura ma forse meno valori elevati fuori dal bacino
+    - Con più epochs (50 -> 100) la loss continua a scendere un po'
+    - Da trasferirsi sul cluster
+
+======= 30/05/2021 =======
+
+- Cambiamenti:
+    - Rete semplificata al minimo, aumentato spazio latente (32x32), ridotti i canali: sembra previsione più nitida
+    - Ridotto la batch size, potrebbe far fatica a generalizzare troppi sample
+    - Sistemato caching difettoso nel data loader
+- Osservazioni:
+    - Il caching fornisce una netta velocizzazione nel data loading
+    - Forse una batch size più bassa migliora l'apprendimento
+- Risolti problemi:
+    - Il training sembra più sensato con una rete più semplice + caching risolto
+    - La loss non oscilla più se: aumento il num. di frames futuri + riduco la batch size
+- Problemi:
+    - la sequenza, andando avanti nel batch, ha due direzioni: asciutto->flooded, flooded->asciutto
+      causa di ambiguità?
+    - Non credo la misura d'errore sia troppo affidabile
+    - Filtri più grossi -> da errore dimensione, da testare
+
