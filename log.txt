@@ -84,3 +84,29 @@
     - Non credo la misura d'errore sia troppo affidabile
     - Filtri più grossi -> da errore dimensione, da testare
 
+======= 01/06/2021 =======
+======= 08/06/2021 =======
+
+- batch size = 1 meglio?
+[x] batch size: solo sequenze della stessa area per batch?
+    [x] batch troppo grosso: 33 sequenze -> creare più batch con size variabile (non sempre divisibili), basta che abbiano sequenze della stessa area!
+    [x] PROBLEMA: cache hit ratio = 0, lento loading
+[X] normalizzazione: basta impostare che il minimo sia 0, senza variare la dev std!!
+    [x] DEP niente
+    [x] BTM: trova minimo e sottrailo
+[X] valutare senza batch normalization
+- kernel più grande = anche usare una risoluzione più bassa (sintetizzare), possibile da implementare nel dataloader (downsample, 1x, 2x) con filtro gaussiano
+- NON aumentare i filtri
+
+- fornire in input nuove sequenze con frame futuri predetti
+- prevedere tanti frame futuri in 1 volta non serve
+
+
+======= 11/06/2021 =======
+[ ] La rete performa in base all'inizializzazione random dei pesi. Al momento c'è l'inizializzazione He: https://stackoverflow.com/questions/49433936/how-to-initialize-weights-in-pytorch
+[ ] Dopo un certo numero di epochs, la rete "collassa" le previsioni in una matrice dai pattern strani, e la loss può scendere o salire
+
+Ipotesi:
+- trovare una inizializzazione sempre valida per i pesi
+    - learning rate più basso (1e-3) forse aiuta meglio ed evita il collasso (ottimo!!)
+- cambiare misure accuratezza (non sono molto valide)

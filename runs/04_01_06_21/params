@@ -1,0 +1,44 @@
+==============================
+Epochs			20
+Batch size		4
+Past frames		6
+Future frames		2
+Batch shuffle       ON
+Sequence shuffle    ON
+==============================
+
+==============================
+
+kernel_size = (3, 11, 11)
+padding = (1, 5, 5)
+
+
+nn.Conv3d(channels, 8, (1,11,11), stride=1, padding=(1,5,5)),
+nn.AvgPool3d((1,2,2)),
+
+ResNetBlock(in_filters = 8, filters = 8, stride = 2, kernel_size=kernel_size, padding=padding),
+
+nn.Conv3d(8, 16, (1,1,1)),
+ResNetBlock(in_filters = 16, filters = 16, stride = 2, kernel_size=kernel_size, padding=padding),
+
+nn.Conv3d(16, 32, (1,1,1)),
+ResNetBlock(in_filters = 32, filters = 32, stride = 1, kernel_size=kernel_size, padding=padding),
+
+nn.Conv3d(32, 64, (1,1,1)),
+ResNetBlock(in_filters = 64, filters = 64, stride = 1, kernel_size=kernel_size, padding=padding),
+
+# ----------------------
+
+nn.ConvTranspose3d(64, 32, (1,2,2), stride=(1,2,2)),
+nn.BatchNorm3d(num_features=32),
+
+nn.ConvTranspose3d(32, 16, (1,2,2), stride=(1,2,2)),
+nn.BatchNorm3d(num_features=16),
+
+nn.ConvTranspose3d(16, 8, (1,2,2), stride=(1,2,2)),
+nn.BatchNorm3d(num_features=8),
+
+nn.ConvTranspose3d(8, 8, (1,1,1), stride=(1,1,1)),
+nn.BatchNorm3d(num_features=8),
+
+nn.ConvTranspose3d(8, 1, (1,1,1), stride=(1,1,1)),

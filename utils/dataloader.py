@@ -2,6 +2,8 @@ import numpy as np
 import os
 from tqdm import tqdm
 import random
+import math
+import cv2 as cv
 
 
 class DataPartitions():
@@ -69,7 +71,7 @@ class DataPartitions():
 # ------------------------------------------------------------------------------
 class DataGenerator():
     def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
-                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, shuffle=True, deep_shuffle=True, caching=True):
+                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, caching=True, downsampling=False):
         '''
             Data Generator
             Inputs:
@@ -82,16 +84,18 @@ class DataGenerator():
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        self.batch_size = batch_size
-
         self.dataset_partitions = dataset_partitions
+        self.batch_size = np.min([len(x[1]) for x in self.dataset_partitions]) # minimo numero di sequenze per area
 
         self.n_channels = n_channels
-        self.shuffle = shuffle
-        self.deep_shuffle = shuffle and deep_shuffle
         self.past_frames = past_frames
         self.future_frames = future_frames
         self.caching = caching
+
+        self.batch_size = batch_size
+        self.batches_per_area = math.ceil(len(dataset_partitions[0][1]) / batch_size)
+        self.blurry_filter_size = (3, 3)
+        self.downsampling = downsampling
 
         self.root = root
 
@@ -100,40 +104,18 @@ class DataGenerator():
         self.buffer_memory = buffer_memory
         self.buffer_hit_ratio = 0
 
-        # Shuffle and initialize
-        if self.shuffle:
-            self.shuffle_sequences()
-
-    def get_total_sequences(self):
-        ' Numero totale di sequenze frames '
-        return sum([len(a[1]) for a in self.dataset_partitions])
+        # Warning sequenze diverse
+        equal_seqlens = np.array([len(x[1])==len(self.dataset_partitions[0][1]) for x in self.dataset_partitions])
+        if not np.all(equal_seqlens):
+            print("[!] Sono presenti aree con un numero differente di sequenze")
 
     def __len__(self):
         ' Numero totale di batches '
-        return  \
-            int(self.get_total_sequences() / self.batch_size) + (self.get_total_sequences() % self.batch_size)
+        return self.batches_per_area * len(self.dataset_partitions)
 
     def __getitem__(self, index):
         'Generate one batch of data'
-
         return self.__data_generation(index)
-
-    def shuffle_sequences(self):
-        ' Shuffle delle sequenze solo quando viene creato il dataloader '
-
-        # Shuffle sequenze esterne
-        random.shuffle(self.dataset_partitions)
-
-        # Shuffle sequenze interne
-        if self.deep_shuffle:
-            for i in range(len(self.dataset_partitions)):
-                n_sequences = list(range(len(self.dataset_partitions[i][1])))
-                random.shuffle(n_sequences)  # shuffle indici sequenze X (le Y dipendono dall'accesso alla X)
-                self.dataset_partitions[i] = (
-                    self.dataset_partitions[i][0],
-                    [self.dataset_partitions[i][1][x] for x in n_sequences], # rialloca le sequenze X randomizzate
-                    self.dataset_partitions[i][2]
-                )
 
     def get_X(self):
         'Generates only the X split array'
@@ -143,7 +125,6 @@ class DataGenerator():
         for i in tqdm(range(num_batches)):
             x, _ = self.__getitem__(i)
             X[i] = x
-
         return X
 
     def get_Y(self):
@@ -154,7 +135,6 @@ class DataGenerator():
         for i in tqdm(range(num_batches)):
             _, y = self.__getitem__(i)
             Y[i] = y
-
         return Y
 
     def __data_generation(self, batch_index):
@@ -168,119 +148,106 @@ class DataGenerator():
         X = np.empty((self.batch_size, *self.input_dim))
         y = np.empty((self.batch_size, *self.output_dim))
 
-        seq_start = batch_index * self.batch_size
+        # Scorre sequenza nel batch
+        area_index = int(batch_index / self.batches_per_area)
+        sequence_start = batch_index % self.batches_per_area
 
-        area_start = int(seq_start / len(self.dataset_partitions[0][1]))
-        seq_start = int(seq_start % len(self.dataset_partitions[0][1]))
-        cnt = self.batch_size
+        w = 0 # index per i datapoints interni al batch
+        for i in range(sequence_start, sequence_start + self.batch_size, 1):
+            if i > len(self.dataset_partitions[area_index][1]):
+                break
 
-        i = area_start
-        x = 0
-        # Dall'area di partenza
-        while i < len(self.dataset_partitions) and cnt > 0:
+            sequence = self.dataset_partitions[area_index][1][i]
 
-            if i == area_start: j = seq_start
-            else: j = 0
+            # --- BTM
+            btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/mini-decoded.BTM")
+            if self.downsampling:
+                btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
+                btm = cv.pyrDown(btm)
 
-            # Dalla sequenza di partenza
-            seq_len = len(self.dataset_partitions[area_start][1])
-            while j < seq_len and cnt > 0:
+            # riduzione valori il sottraendo minimo
+            min_btm = np.min(btm)
+            btm = btm - min_btm
 
-                # --- BTM
-                #btm = np.loadtxt(self.root + self.dataset_partitions[i][0] + "/mini-decoded.BTM")
-                #btm.resize(btm.shape[0], btm.shape[1], 1)
-                #btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
+            btm.resize(btm.shape[0], btm.shape[1], 1)
+            btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
 
-                deps = None
-                velocities = None
+            deps = None
+            velocities = None
 
-                # Scorre frames nella sequenza
-                for k in range(j, j+self.past_frames+self.future_frames):
+            framestart = int(sequence.replace("id-", ""))
 
-                    gid = i * self.batch_size * seq_len + k
+            # Scorre frames nella sequenza
+            for k in range(framestart, framestart + self.past_frames + self.future_frames):
 
-                    # ---- DEP
+                # id area -> id frame
+                gid = "{}-{}-{}".format(area_index, sequence, k)
+
+                extensions = ["DEP", "VVX", "VVY"]
+                matrices = []
+
+                for i, ext in enumerate(extensions):
                     accesses += 1
-                    global_id = "1-{:04d}".format(gid) # indice linearizzato globale
+                    global_id = "{}-{}".format(i, gid)  # indice linearizzato globale
+
                     cache = self.buffer_lookup(
                         global_id
                     )
                     if cache is False:
-                        frame = np.loadtxt(self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.DEP".format(k))
+                        frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/mini-decoded-{:04d}.{}".format(k, ext))
+                        # --- On-spot Gaussian Blurring
+                        if self.downsampling:
+                            frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
+                            frame = cv.pyrDown(frame)
+                        # ----
                         self.buffer_push(global_id, frame)
                     else:
                         frame = cache
                         hits += 1
+                    matrices.append(frame)
 
-                    # ---- VVX
-                    accesses += 1
-                    global_id = "2-{:04d}".format(gid)  # indice linearizzato globale
-                    cache = self.buffer_lookup(
-                        global_id
-                    )
-                    if cache is False:
-                        vvx = np.loadtxt(
-                            self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.VVX".format(k))
-                        self.buffer_push(global_id, vvx)
-                    else:
-                        vvx = cache
-                        hits += 1
+                frame, vvx, vvy = matrices
 
-                    # ---- VVY
-                    accesses += 1
-                    global_id = "2-{:04d}".format(gid)  # indice linearizzato globale
-                    cache = self.buffer_lookup(
-                        global_id
-                    )
-                    if cache is False:
-                        vvy = np.loadtxt(
-                            self.root + self.dataset_partitions[i][0] + "/mini-decoded-{:04d}.VVY".format(k))
-                        self.buffer_push(global_id, vvy)
-                    else:
-                        vvy = cache
-                        hits += 1
+                # ---
+                velocity = np.sqrt(vvx ** 2 + vvy ** 2)
 
-                    # ---
-                    velocity = np.sqrt(vvx ** 2 + vvy ** 2)
+                if deps is None:
+                    deps = np.array([frame])
+                else:
+                    deps = np.concatenate((deps, np.array([frame])))
 
-                    if deps is None: deps = np.array([frame])
-                    else: deps = np.concatenate((deps, np.array([frame])))
+                if velocities is None:
+                    velocities = np.array([velocity])
+                else:
+                    velocities = np.concatenate((velocities, np.array([velocity])))
 
-                    if velocities is None: velocities = np.array([velocity])
-                    else: velocities = np.concatenate((velocities, np.array([velocity])))
+            # ---------
 
-                # ---------
+            deps[deps > 10e5] = 0
+            velocities[velocities > 10e5] = 0
+            btm_x[btm_x > 10e5] = 0
 
-                deps[deps > 10e5] = 0
-                velocities[velocities > 10e5] = 0
-                #btm_x[btm_x > 10e5] = 0
+            # --- X
+            rx = deps[:self.past_frames]
+            rx.resize((rx.shape[0], rx.shape[1], rx.shape[2], 1))
 
-                # --- X
-                rx = deps[:self.past_frames]
-                rx.resize((rx.shape[0], rx.shape[1], rx.shape[2], 1))
+            rvx = velocities[:self.past_frames]
+            rvx.resize((rvx.shape[0], rvx.shape[1], rvx.shape[2], 1))
 
-                rvx = velocities[:self.past_frames]
-                rvx.resize((rvx.shape[0], rvx.shape[1], rvx.shape[2], 1))
+            # x has 3 channels: dep, velocities, btm
+            X[w, :, ] = np.concatenate((rx, rvx, btm_x), axis=3)
+            # X[x, :, ] = np.concatenate((rx, rvx), axis=3)
 
-                # x has 3 channels: dep, velocities, btm
-                #X[x, :, ] = np.concatenate((rx, rvx, btm_x), axis=3)
-                X[x, :, ] = np.concatenate((rx, rvx), axis=3)
+            # --- Y
+            ry = deps[self.past_frames:]
+            ry.resize((ry.shape[0], ry.shape[1], ry.shape[2], 1))
+            y[w, :, ] = ry  # y has 1 channel: dep
 
-                # --- Y
-                ry = deps[self.past_frames:]
-                ry.resize((ry.shape[0], ry.shape[1], ry.shape[2], 1))
-                y[x, :, ] = ry # y has 1 channel: dep
+            w += 1
 
-                # Scorre sequenza
-                cnt -= 1
-                j += 1
-                x += 1 # sequenza da zero
-
-            # Scorre area
-            i += 1
-
-        if accesses != 0:
-            self.buffer_hit_ratio = hits / accesses;
+        # Buffer ratio calculation
+        if accesses is not 0:
+            self.buffer_hit_ratio = self.buffer_hit_ratio * 0.5 + 0.5 * (hits / accesses)
 
         return X, y
 
