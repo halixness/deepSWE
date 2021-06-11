@@ -241,7 +241,12 @@ class DataGenerator():
             # --- Y
             ry = deps[self.past_frames:]
             ry.resize((ry.shape[0], ry.shape[1], ry.shape[2], 1))
-            y[w, :, ] = ry  # y has 1 channel: dep
+
+            rvy = velocities[self.past_frames:]
+            rvy.resize((rvy.shape[0], rvy.shape[1], rvy.shape[2], 1))
+
+            #y[w, :, ] = ry  # y has 1 channel: dep
+            y[w, :, ] = np.concatenate((ry, rvy), axis=3)
 
             w += 1
 
