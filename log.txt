@@ -108,9 +108,21 @@
 [x] Dopo un certo numero di epochs, la rete "collassa" le previsioni in una matrice dai pattern strani, e la loss può scendere o salire
     - era il learning rate
 
-[ ] Come si comporta in modalità autoregressivo?
+[x] Come si comporta in modalità autoregressivo?
 
 Ipotesi:
 [x] trovare una inizializzazione sempre valida per i pesi
     - learning rate più basso (1e-3) forse aiuta meglio ed evita il collasso (ottimo!!)
 - cambiare misure accuratezza (non sono molto valide)
+
+
+======= 14/06/2021 =======
+- Modalità autoregressiva (1 frame per volta inserito nuovamente in input, sliding window):
+    - non mi sembra stia facendo molto, anzi a volte peggiora: non prevede aumenti di altezza d'acqua
+- Modalità sequenza frame futuri generati con conv3d:
+    - prevede meglio l'aumento d'acqua rispetto all'altra modalità (19,25,39,53, 55, 56)
+    - sospetto a volte che non preveda bene: approssima con lo stesso frame futuro (46)
+- Idee:
+    - stabilire una metrica che valuti la qualità della sequenza frame: somiglianza dell'andamento dei valori (non valore medio per forza)
+    - testare su un dataset più ampio
+    - valutare le previsioni su un dataset totalmente nuovo (baganza o altri)
