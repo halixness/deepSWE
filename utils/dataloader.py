@@ -39,7 +39,6 @@ class DataPartitions():
 
         self.areas = os.listdir(self.root)
         self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
-        # self.areas = ["mini-211-466-421-676"]
 
         if self.partial is not None:
             self.areas = self.areas[:int(len(self.areas) * self.partial)]
@@ -160,7 +159,12 @@ class DataGenerator():
             sequence = self.dataset_partitions[area_index][1][i]
 
             # --- BTM
-            btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/mini-decoded.BTM")
+            btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
+            if len(btm_filenames) == 0:
+                raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
+            btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+
+            # --- Preprocessing
             if self.downsampling:
                 btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
                 btm = cv.pyrDown(btm)
@@ -183,8 +187,18 @@ class DataGenerator():
                 # id area -> id frame
                 gid = "{}-{}-{}".format(area_index, sequence, k)
 
+                # Parameters
                 extensions = ["DEP", "VVX", "VVY"]
                 matrices = []
+
+                # Gets datapoint filename
+                dep_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if
+                                 x.endswith(".DEP")]
+                if len(dep_filenames) == 0:
+                    raise Exception("No DEP maps found for the area {}".format(self.dataset_partitions[area_index][0]))
+
+                # asserting that all maps are named with the same prefix
+                dep_filename = dep_filenames[0].split(".")[0][:-4]
 
                 for i, ext in enumerate(extensions):
                     accesses += 1
@@ -194,7 +208,7 @@ class DataGenerator():
                         global_id
                     )
                     if cache is False:
-                        frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/mini-decoded-{:04d}.{}".format(k, ext))
+                        frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
                         # --- On-spot Gaussian Blurring
                         if self.downsampling:
                             frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
