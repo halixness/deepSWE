@@ -126,3 +126,34 @@ Ipotesi:
     - stabilire una metrica che valuti la qualità della sequenza frame: somiglianza dell'andamento dei valori (non valore medio per forza)
     - testare su un dataset più ampio
     - valutare le previsioni su un dataset totalmente nuovo (baganza o altri)
+
+======= 16/06/2021 =======
+- Rafactoring, modello intercambiabile
+
+======= 22/06/2021 =======
+- Preparazione dataset e ambiente sul cluster HPC
+
+======= 26/06/2021 =======
+- Test del modello con dataset nuovi (Baganza)
+
+
+======= 28/06/2021 =======
+- metrica con focus sulle aree in cui veramente cambia di piú
+- modulo velocitá: mappa di attenzione
+- max scarto (con attenzione) tra i frames della sequenza in input, cosí da filtrare per inserire nel dataset
+- max wse al posto del frame a metà per la scansione delle aree di focus in con cut
+- tracciare andamento di un movimento (verifica task di video prediction)
+
+
+1) aumento la frequenza di campionamento nel tempo
+2) downsampling su mappa totale
+3) testare in scratch un training sullo stesso dataset
+4) presentazione di tutti i processi, idee del lavoro
+
+======= 30/06/2021 =======
+[x] max scarto (con attenzione) tra i frames della sequenza in input, cosí da filtrare per inserire nel dataset
+[x] max wse al posto del frame a metà per la scansione delle aree di focus in con cut
+
+[ ] testare l'allenamento con dataset raw 10min
+[ ] provare a filtrare le sequenze con la nuova metrica
+[ ] testare il modello contro dataset con frequenze di campionamento diverse (challenge)

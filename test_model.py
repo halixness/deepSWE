@@ -53,7 +53,7 @@ device = th.device(dev)
 
 num_run = len(os.listdir("runs/")) + 1
 now = datetime.now()
-foldername = "{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
 os.mkdir("runs/" + foldername)
 
 # -------------- Data definition
@@ -64,7 +64,7 @@ partitions = DataPartitions(
     past_frames=6,
     future_frames=4,
     root="../datasets/baganza/",
-    partial=0.4
+    partial=0.1
 )
 
 arda_ds = DataGenerator(
@@ -117,7 +117,8 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(net.parameters(), lr=1e-3)
 
 # Loading model weights from previous training
-net.load_state_dict(th.load("runs/10_18_06_2021_14_20_18/model.weights"))
+weights_path = "runs/10_18_06_2021_14_20_18/model.weights"
+net.load_state_dict(th.load(weights_path))
 net.eval()
 
 losses = []
@@ -126,84 +127,38 @@ test_errors = []
 
 epochs = 50
 
-print(net.eval(X[0]))
+j = np.random.randint(len(X))       # random batch
+k = np.random.randint(len(X[j]))    # random datapoint
+outputs = net(X[j])
 
-'''
-plt.clf()
-for i, batch in enumerate(X):
+print("[!] Successfully loaded weights from {}".format(weights_path))
 
-    optimizer.zero_grad()
+# ------------------------------
+fig, axs = plt.subplots(1, outputs[k, 0].shape[0], figsize=(plotsize, plotsize))
 
-    outputs = net(batch)
+for ax in axs:
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
 
-    loss = criterion(outputs, Y[i])
-    loss.backward()
-    optimizer.step()
+for i, frame in enumerate(outputs[k, 0]):
+    axs[i].matshow(frame.cpu().detach().numpy())
 
-    # print statistics
-    running_loss += loss.item()
-
-    losses.append(loss.item())
-
-    # print("batch {} - loss {}".format(i, loss.item()))
-
-    if i == len(X) - 1:
-        # randomly pick a test batch and compute it
-        i = np.random.randint(len(Y), size=1)
-
-        train_out = net(X[i][0])
-        test_out = net(X[i][0])
-
-        # train_err = reverse_ssim(train_out, Y[i]).item()
-        # test_err = reverse_ssim(test_out, Y[i]).item()
-        train_err = 0
-        test_err = 0
-
-        test_errors.append(test_err)
-        errors.append(train_err)
-
-        print('[%d, %5d] train_err: %.3f \t  test_err: %.3f \t avg_loss: %.3f' %
-              (epoch, i, train_err, test_err, np.mean(losses)))
-
-    if epoch == epochs-1:
-        i = np.random.randint(len(X))
-        outputs = net(X[i])
-
-        # ------------------------------
-        fig, axs = plt.subplots(1, outputs[0, 0].shape[0], figsize=(plotsize, plotsize))
-
-        for ax in axs:
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-
-        for i, frame in enumerate(outputs[0, 0]):
-            axs[i].matshow(frame.cpu().detach().numpy())
-
-        plt.show()
-        plt.savefig("runs/" + foldername + "/last_epoch_prediction.png")
-        # ------------------------------
-
-        # if epoch % 10 == 0:
-        #    print('[%d, %5d] loss: %.3f' %
-        #          (epoch + 1, i + 1, running_loss / 2000))
-        #    running_loss = 0.0
-
-th.save(net.state_dict(), "runs/" + foldername + "/model.weights")
-print("[!] Training completed, model weights saved")
-
-# loss plot
-plt.clf()
-plt.title("loss")
-plt.plot(range(len(losses)), losses)
 plt.show()
-plt.savefig("runs/" + foldername + "/loss.png")
+plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(j))
 
-# ssim plot
+# ------------------------------
+true_means = []
+predicted_means = []
+for i, frame in enumerate(X[j][k]):
+    true_means.append(frame.cpu().detach().numpy().mean())
+    predicted_means.append(outputs[k, 0, i].cpu().detach().numpy().mean())
+
 plt.clf()
-plt.title("relative error")
-plt.plot(range(len(errors)), errors, label="train")
-plt.plot(range(len(test_errors)), test_errors, label="test")
+plt.plot(range(len(true_means)), true_means,  "-b", label="True frames mean")
+plt.plot(range(len(true_means)), true_means,  "*")
+
+plt.plot(range(len(predicted_means)), predicted_means,  "-g", label="Predicted frames mean")
+plt.plot(range(len(predicted_means)), predicted_means,  "*")
+plt.grid()
 plt.legend()
-plt.show()
-plt.savefig("runs/" + foldername + "/ssim_error.png")
-'''
+plt.savefig("runs/" + foldername + "/eval_means_{}.png".format(j))

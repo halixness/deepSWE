@@ -21,58 +21,56 @@ yend=$5
 width=$((xend - xstart))
 height=$((yend - ystart))
 step=256
-skip=25
+skip=1
 
-# Blocks = (w,h) / step
-xblocks=$((width/step))
-yblocks=$((height/step))
+# Crea dir se non esiste
+destdir="../mini/mini-$xstart-$xend-$ystart-$yend"
 
-echo Cutting in $yblocks x $xblocks blocks...
+if [ ! -d $destdir ] 
+then
+	mkdir $destdir
+fi
 
-for (( y=1; y<=$yblocks; y+= 1)); do
-	for (( x=1; x<=$xblocks; x+= 1)); do
-		
-		xmin=$((1 + xstart + (x-1) * step))
-		xmax=$((xmin + step - 1))
+echo Size is: $((xend-xstart))'x'$((yend-ystart))
 
-		ymin=$((1 + ystart + (y-1) * step))
-		ymax=$((ymin+step - 1))
+# Print file
+len=$(ls -lR *.DEP | wc -l)
 
-		destdir="../mini/mini-$xmin-$xmax-$ymin-$ymax"
+xmin=$((1 + xstart + step))
+xmax=$((xmin + step - 1))
 
-		# Crea dir se non esiste
-		if [ ! -d $destdir ] 
-		then
-			mkdir $destdir
-		fi
+ymin=$((1 + ystart + step))
+ymax=$((ymin+step - 1))
 
-		echo Size is: $((xmax-xmin+1))'x'$((ymax-ymin+1))
 
-		# Print file
-		x=0
-		len=$(ls -lR *.DEP | wc -l)
+# --- BTM
+cat decoded-last.BTM | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/mini-decoded-last.BTM; 
 
-		# --- BTM
-		#cat decoded-last.BTM | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/mini-decoded-last.BTM; 
+# --- DEP
+for file in *.DEP; do cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/$file; done
 
-		# --- DEP
-		# for file in *.DEP; do cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/$file; done
-			
-		for file in *.DEP; do 
-		
-			j=$(printf "%04d" $x)
+# --- VVX
+for file in *.VVX; do cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/$file; done
 
-			cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/mini-decoded-$j.DEP; 
-			x=$((x + skip))
+# --- VVY
+for file in *.VVY; do cat $file | sed -n $ymin','$ymax'p' | cut -d" " -f $xmin-$xmax >> $destdir/$file; done
 
-			if [[ $x -ge $len ]]; then
-				break
-			fi
+	
+# same as the above one, but with variable step (to downsample the sequence and not pick each frame)
+#x=0
+#for file in *.DEP; do 
+#
+#	j=$(printf "%04d" $x)
+#
+#	cat $file | sed -n $ystart','$yend'p' | cut -d" " -f $xstart-$xend >> $destdir/mini-decoded-$j.DEP; 
+#	x=$((x + skip))
+#
+#	if [[ $x -ge $len ]]; then
+#		break
+#	fi
+#
+#done
 
-		done
-
-		echo [!] Area $y-$x done!
-	done
-done
+echo [!] Area $xstart-$xend-$ystart-$yend done!
 
 cd ..
