@@ -1,10 +1,8 @@
 import numpy as np
 import os
 from tqdm import tqdm
-import random
 import math
 import cv2 as cv
-
 
 class DataPartitions():
     def __init__(self, past_frames, future_frames, root, partial=None):
@@ -70,7 +68,7 @@ class DataPartitions():
 # ------------------------------------------------------------------------------
 class DataGenerator():
     def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
-                 buffer_memory=1, buffer_size=100, batch_size=16, n_channels=1, caching=True, downsampling=False):
+                 buffer_memory=1, buffer_size=100, batch_size=16, caching=True, downsampling=False):
         '''
             Data Generator
             Inputs:
@@ -86,7 +84,6 @@ class DataGenerator():
         self.dataset_partitions = dataset_partitions
         self.batch_size = np.min([len(x[1]) for x in self.dataset_partitions]) # minimo numero di sequenze per area
 
-        self.n_channels = n_channels
         self.past_frames = past_frames
         self.future_frames = future_frames
         self.caching = caching

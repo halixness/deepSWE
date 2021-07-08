@@ -151,9 +151,25 @@ Ipotesi:
 4) presentazione di tutti i processi, idee del lavoro
 
 ======= 30/06/2021 =======
+======= 04/07/2021 =======
 [x] max scarto (con attenzione) tra i frames della sequenza in input, cosí da filtrare per inserire nel dataset
 [x] max wse al posto del frame a metà per la scansione delle aree di focus in con cut
 
-[ ] testare l'allenamento con dataset raw 10min
+[x] testare l'allenamento con dataset raw 10min
+    - problema: le celle inutili sono di intralcio nel calcolo della loss/accuracy, per questo la rete approssima troppo male
+      idea: bisogna usare la mappa delle velocità come "attention map"
+      ----> sta funzionando! [ ] bisogna provare a incorporare questo nella rete neurale
+      idea: la vision attention forse può funzionare meglio di conv2d in questo caso!
+
 [ ] provare a filtrare le sequenze con la nuova metrica
+    - idea: genera tutte le sequenze, quindi crea n vettori per area (all'interno num. variabile di sequenze), idealmente scarta i batch residui che non raggiungono batch_size per un'area
 [ ] testare il modello contro dataset con frequenze di campionamento diverse (challenge)
+
+
+======= 05/07/2021 =======
+Task:
+1) implementare il filtro sequenza nel dataloader
+2) provare il training con il nuovo dataset 10/7 min filtrato
+3) testare con una rete più profonda (o più hidden features)
+4) testare con un learning rate più basso/alto
+5) prova a togliere la velocità dall'input

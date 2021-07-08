@@ -80,15 +80,14 @@ class ResNetAE(nn.Module):
             print("==== Model Summary ====")
             print("{:<15s}{:>4s}".format("Block", "Output shape"))
 
+        # Feed forward
         for i, l in enumerate(self.layers):
             x = l(x)
-
             if summary:
                 print("{:<20s}{:>4s}".format(
                     str(l).split("(")[0],
                     str(x.shape).split("[")[1].split("]")[0]
                 ))
-
         return x
 
 # ---------------------------------------------------------------------------------
