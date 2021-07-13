@@ -121,6 +121,7 @@ class DataGenerator():
         for i in tqdm(range(num_batches)):
             x, _ = self.__getitem__(i)
             X[i] = x
+            #if i % 2 == 0: print("{}%".format(i/num_batches*100))
         return X
 
     def get_Y(self):
@@ -131,6 +132,7 @@ class DataGenerator():
         for i in tqdm(range(num_batches)):
             _, y = self.__getitem__(i)
             Y[i] = y
+            #if i % 2 ==	0: print("{}%".format(i/num_batches*100))
         return Y
 
     def __data_generation(self, batch_index):

@@ -49,6 +49,8 @@ else:
     dev = "cpu"
 device = th.device(dev)
 
+print("[x] Benchmark initialized, loading dataset...")
+
 # -------------- Setting up the run
 
 num_run = len(os.listdir("runs/")) + 1
@@ -63,19 +65,18 @@ plotsize = 15
 partitions = DataPartitions(
     past_frames=6,
     future_frames=4,
-    root="../datasets/baganza/",
+    root="../datasets/arda/mini/",
     partial=0.1
 )
 
 arda_ds = DataGenerator(
-    root="../datasets/baganza/",
+    root="../datasets/arda/mini/",
     dataset_partitions=partitions.get_partitions(),
     past_frames=partitions.past_frames,
     future_frames=partitions.future_frames,
     input_dim=(partitions.past_frames, 256, 256, 3),
     output_dim=(partitions.future_frames, 256, 256, 2),
     batch_size=4,
-    n_channels=1,
     buffer_size=1e3,
     buffer_memory=100,
     downsampling=False,
@@ -89,6 +90,8 @@ Y[Y > 10e5] = 0
 
 
 # -------------- Data preprocessing
+
+print("[x] Preprocessing started...")
 
 # Shuffle batches
 X, Y = unison_shuffled_copies(X, Y)
@@ -107,6 +110,8 @@ X = X.permute(0, 1, 5, 2, 3, 4)
 Y = Y.permute(0, 1, 5, 2, 3, 4)
 
 # -------------- Model
+
+print("[x] Initializing model...")
 
 net = ResNetAE(channels=3).to(device)
 
@@ -147,6 +152,8 @@ plt.show()
 plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(j))
 
 # ------------------------------
+
+print("[x] Starting inference...")
 true_means = []
 predicted_means = []
 for i, frame in enumerate(X[j][k]):
