@@ -173,3 +173,8 @@ Task:
 3) testare con una rete più profonda (o più hidden features)
 4) testare con un learning rate più basso/alto
 5) prova a togliere la velocità dall'input
+
+======= 12/07/2021 =======
+Punti da riunione:
+- Non fornire vettore unico velocitá, tenerli separati
+- Maschera attenzione: trovare un modo per calcolarla per il modello, velocitá non molto affidabile
