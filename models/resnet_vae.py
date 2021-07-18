@@ -132,20 +132,20 @@ class ResNet18Dec(nn.Module):
     def forward(self, z):
         x = self.linear(z)
         x = x.view(z.size(0), 512, 1, 1)
-        x = F.interpolate(x, scale_factor=4)
+        x = F.interpolate(x, scale_factor=16) # 16 scales correctly to 256,256
         x = self.layer4(x)
         x = self.layer3(x)
         x = self.layer2(x)
         x = self.layer1(x)
         x = torch.sigmoid(self.conv1(x))
-        x = x.view(x.size(0), 3, 64, 64)
+        x = x.view(x.size(0), 3, 256, 256)
         return x
 
 class VAE(nn.Module):
 
     def __init__(self, z_dim):
         super().__init__()
-        self.encoder = ResNet18Enc(z_dim=z_dim)
+        self.encoder = ResNet18Enc(z_dim=z_dim, nc=4)
         self.decoder = ResNet18Dec(z_dim=z_dim)
 
     def forward(self, x):
