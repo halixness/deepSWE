@@ -192,6 +192,7 @@ epochs = 200
 for epoch in range(epochs):  # loop over the dataset multiple times
 
     running_loss = 0.0
+    print("---- Epoch {}".format(epoch))
     for i, batch in enumerate(X_train):
 
         optimizer.zero_grad()
@@ -225,7 +226,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         losses.append(loss.item())
 
-        print("batch {} - loss {}".format(i, loss.item()))
+        if i == 0: print("batch {} - loss {}".format(i, loss))
 
     if epoch % 3 == 0:
 
