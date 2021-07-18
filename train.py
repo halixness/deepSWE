@@ -49,7 +49,7 @@ def str2bool(v):
 
 # -------------------------------
 
-parser = argparse.ArgumentParser(description='Generates the dataset file as numpy file')
+parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
 parser.add_argument('-dset', dest='dataset_path',
                     help='path to a npy stored dataset')

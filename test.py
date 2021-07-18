@@ -22,6 +22,16 @@ mat.use("Agg") # headless mode
 
 # -------------- Functions
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
@@ -46,7 +56,7 @@ def reverse_ssim(y, y_true):
 
     # -------------------------------
 
-parser = argparse.ArgumentParser(description='Generates the dataset file as numpy file')
+parser = argparse.ArgumentParser(description='Tests a train model against a given dataset')
 
 parser.add_argument('-weights', dest='weights_path',
                     help='model weights for testing')
