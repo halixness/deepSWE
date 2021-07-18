@@ -15,6 +15,8 @@ import torch.nn as nn
 import pytorch_ssim
 from torch.autograd import Variable
 
+import argparse
+
 mat.use("Agg") # headless mode
 #mat.rcParams['text.color'] = 'w'
 
@@ -42,7 +44,49 @@ def reverse_ssim(y, y_true):
 
     return 1 / (tot_ssim / len(y))
 
-# Torch over CUDA
+    # -------------------------------
+
+parser = argparse.ArgumentParser(description='Generates the dataset file as numpy file')
+
+parser.add_argument('-weights', dest='weights_path',
+                    help='model weights for testing')
+parser.add_argument('-dset', dest='dataset_path',
+                    help='path to a npy stored dataset')
+parser.add_argument('-r', dest='root',
+                    help='root path with the simulation files (cropped and stored in folders)')
+parser.add_argument('-p', dest='past_frames', default=1, type=int,
+                    help='number of past frames')       
+parser.add_argument('-f', dest='future_frames', default=1, type=int, 
+                    help='number of future frames')       
+parser.add_argument('-s', dest='partial', default=None, type=float,
+                    help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
+parser.add_argument('-i', dest='image_size', default=256, type=int,
+                    help='image size (width = height)')
+parser.add_argument('-b', dest='batch_size', default=4, type=int,
+                    help='batch size') 
+parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
+                    help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
+parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
+                    help='size of the cache memory (in entries)')
+parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
+                    help='temporal length of the cache memory (in iterations)')                                                                                                  
+parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
+                    const=True, help='enable 2x downsampling (with gaussian filter)')  
+parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
+                    help='latent size for the VAE')                                                                                                                                                      
+
+args = parser.parse_args()
+
+if args.root is None:
+    print("required: please specify a root path: -r /path")
+    exit()
+
+if args.weights_path is None:
+    print("required: please specify a path for the weights file: -weights /path/model.weights")
+    exit()
+
+# -------------- 
+
 if th.cuda.is_available():
     dev = "cuda:0"
 else:
@@ -62,32 +106,48 @@ os.mkdir("runs/" + foldername)
 
 plotsize = 15
 
-partitions = DataPartitions(
-    past_frames=6,
-    future_frames=4,
-    root="../datasets/arda/mini/",
-    partial=0.1
-)
+# ---- No dataset file: load from dir
+if args.dataset_path is None:
 
-arda_ds = DataGenerator(
-    root="../datasets/arda/mini/",
-    dataset_partitions=partitions.get_partitions(),
-    past_frames=partitions.past_frames,
-    future_frames=partitions.future_frames,
-    input_dim=(partitions.past_frames, 256, 256, 3),
-    output_dim=(partitions.future_frames, 256, 256, 2),
-    batch_size=4,
-    buffer_size=1e3,
-    buffer_memory=100,
-    downsampling=False,
-)
+    partitions = DataPartitions(
+        past_frames=args.past_frames,
+        future_frames=args.future_frames,
+        root=args.root,
+        partial=args.partial
+    )
+
+    dataset = DataGenerator(
+        root=args.root,
+        dataset_partitions=partitions.get_partitions(),
+        past_frames=partitions.past_frames, 
+        future_frames=partitions.future_frames,
+        input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
+        output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
+        batch_size=args.batch_size,
+        buffer_size=args.buffer_size,
+        buffer_memory=args.buffer_memory,
+        downsampling=False,
+        dynamicity = args.dynamicity
+    )
+
+
+    X, Y, extra_batch = dataset.get_data()
+
+    X[X > 10e5] = 0 
+    Y[Y > 10e5] = 0
+
+# ---- Otherwise load stored file
+else:
+    X, Y, extra_batch = np.load(args.dataset_path, allow_pickle=True)
+    print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
+        args.dataset_path, X.shape, Y.shape
+    ))
 
 X = arda_ds.get_X()
 Y = arda_ds.get_Y()
 
 X[X > 10e5] = 0
 Y[Y > 10e5] = 0
-
 
 # -------------- Data preprocessing
 
@@ -111,32 +171,19 @@ Y = Y.permute(0, 1, 5, 2, 3, 4)
 
 # -------------- Model
 
-print("[x] Initializing model...")
+from models.resnet_vae import VAE
 
-net = ResNetAE(channels=3).to(device)
-
-# Verbose network forward pass to diplay the architecture
-print(net(th.Tensor(np.random.random((16, 3, 6, 128, 128))).to(device), True).shape)
-
-criterion = nn.MSELoss()
-optimizer = optim.Adam(net.parameters(), lr=1e-3)
+net = VAE(args.latent_size).to(device)
 
 # Loading model weights from previous training
-weights_path = "runs/10_18_06_2021_14_20_18/model.weights"
-net.load_state_dict(th.load(weights_path))
+net.load_state_dict(th.load(args.weights_path))
 net.eval()
-
-losses = []
-errors = []
-test_errors = []
-
-epochs = 50
 
 j = np.random.randint(len(X))       # random batch
 k = np.random.randint(len(X[j]))    # random datapoint
 outputs = net(X[j])
 
-print("[!] Successfully loaded weights from {}".format(weights_path))
+print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
 # ------------------------------
 fig, axs = plt.subplots(1, outputs[k, 0].shape[0], figsize=(plotsize, plotsize))

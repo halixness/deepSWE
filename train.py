@@ -27,7 +27,10 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torch.autograd import Variable
 import torchvision.transforms as transforms
+
 mat.use("Agg") # headless mode
+
+# -------------- Functions
 
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
@@ -69,12 +72,18 @@ parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
 parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
 parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
-                    const=True, help='enable 2x downsampling (with gaussian filter)')                                                                                                  
+                    const=True, help='enable 2x downsampling (with gaussian filter)')  
+parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
+                    help='learning rate')                                              
+parser.add_argument('-epochs', dest='epochs', default=100, type=int,
+                    help='training iterations')
+parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
+                    help='latent size for the VAE')                                                                                                                                                      
 
 args = parser.parse_args()
 
 if args.root is None:
-    print("required: please specify a root path and a destination path with -r /path -o filename")
+    print("required: please specify a root path: -r /path")
     exit()
 # -------------- Setting up the run
 
@@ -155,7 +164,7 @@ device = th.device(dev)
 
 from models.resnet_vae import VAE
 
-net = VAE(1024).to(device)
+net = VAE(args.latent_size).to(device)
 
 '''
 weights_path = "runs/train_15_04_07_2021_23_28_19/model.weights"
@@ -178,7 +187,7 @@ y_test = y_test.permute(0, 1, 5, 2, 3, 4)
 
 criterion = nn.MSELoss() # reduction='sum'
 ssim_loss = pytorch_ssim.SSIM()
-optimizer = optim.Adam(net.parameters(), lr=1e-4)
+optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
 losses = []
@@ -187,7 +196,7 @@ test_errors = []
 
 print("\n[x] It's training time!")
 
-epochs = 200
+epochs = args.epochs
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
@@ -226,7 +235,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         losses.append(loss.item())
 
-        if i == 0: print("batch {} - loss {}".format(i, loss))
+        if i == 0: print("batch {} - avg.loss {}".format(i, np.mean(losses)))
 
     if epoch % 3 == 0:
 
@@ -258,7 +267,6 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         #    running_loss = 0.0
 
 print('[!] Finished Training, storing weights...')
-
 
 weights_path = "runs/" + foldername + "/model.weights"
 th.save(net.state_dict(), weights_path)
