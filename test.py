@@ -153,12 +153,6 @@ else:
         args.dataset_path, X.shape, Y.shape
     ))
 
-X = arda_ds.get_X()
-Y = arda_ds.get_Y()
-
-X[X > 10e5] = 0
-Y[Y > 10e5] = 0
-
 # -------------- Data preprocessing
 
 print("[x] Preprocessing started...")
@@ -186,30 +180,35 @@ from models.resnet_vae import VAE
 net = VAE(args.latent_size).to(device)
 
 # Loading model weights from previous training
+print("[x] Loading model weights")
 net.load_state_dict(th.load(args.weights_path))
 net.eval()
 
 j = np.random.randint(len(X))       # random batch
 k = np.random.randint(len(X[j]))    # random datapoint
-outputs = net(X[j])
+outputs = net(X[j,:,:,0,:,:])
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
 # ------------------------------
-fig, axs = plt.subplots(1, outputs[k, 0].shape[0], figsize=(plotsize, plotsize))
+fig, axs = plt.subplots(X[j].shape[0], 3, figsize=(plotsize, plotsize))
+# batch, channel, w, h
 
 for ax in axs:
     ax.set_yticklabels([])
     ax.set_xticklabels([])
 
-for i, frame in enumerate(outputs[k, 0]):
-    axs[i].matshow(frame.cpu().detach().numpy())
+# for each sequence in batch
+for i, frame in enumerate(outputs[0]):
+    axs[i][0].matshow(X[j,i,0,0].cpu().detach().numpy())
+    axs[i][1].matshow(Y[j,i,0,0].cpu().detach().numpy())
+    axs[i][2].matshow(outputs[0][i,0].cpu().detach().numpy())
 
 plt.show()
 plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(j))
 
 # ------------------------------
-
+'''
 print("[x] Starting inference...")
 true_means = []
 predicted_means = []
@@ -226,3 +225,4 @@ plt.plot(range(len(predicted_means)), predicted_means,  "*")
 plt.grid()
 plt.legend()
 plt.savefig("runs/" + foldername + "/eval_means_{}.png".format(j))
+'''

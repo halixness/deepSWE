@@ -51,6 +51,8 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
+parser.add_argument('-tf', dest='test_flight',
+                    help='Test flight. Avoids creating a train folder for this session.')
 parser.add_argument('-dset', dest='dataset_path',
                     help='path to a npy stored dataset')
 parser.add_argument('-r', dest='root',
@@ -93,20 +95,20 @@ else:
     dev = "cpu"  
 device = th.device(dev) 
 
-from models.unet.unet_model import R_UNet
+from models.ae.resnet_ae import ResNetAE
 
-net = R_UNet(n_channels=4, n_classes=3).to(device)
-print(net(th.rand((5,4,256*3,256*3))))
+net = ResNetAE(channels=4).to(device)
+print(net(th.rand((1,4,256*3,256*3)).to(device)))
 
 exit()
-# ----------------------
     
 # -------------- Setting up the run
 
-num_run = len(os.listdir("runs/")) + 1
-now = datetime.now()
-foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
-os.mkdir("runs/" + foldername)
+if args.test_flight is not None:
+    num_run = len(os.listdir("runs/")) + 1
+    now = datetime.now()
+    foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+    os.mkdir("runs/" + foldername)
 
 # -------------------------------
 
@@ -274,7 +276,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
         plt.show()
-        plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
+        if args.test_flight is not None:
+            plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
         plt.clf()
         #------------------------------
 
@@ -284,16 +287,17 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         #    running_loss = 0.0
 
 print('[!] Finished Training, storing weights...')
-
-weights_path = "runs/" + foldername + "/model.weights"
-th.save(net.state_dict(), weights_path)
+if args.test_flight is not None:
+    weights_path = "runs/" + foldername + "/model.weights"
+    th.save(net.state_dict(), weights_path)
 
 # Loss plot
 mpl.rcParams['text.color'] = 'k'
 
 plt.title("loss")
 plt.plot(range(len(losses)), losses)
-plt.savefig("runs/" + foldername + "/loss.png")
+if args.test_flight is not None:
+    plt.savefig("runs/" + foldername + "/loss.png")
 plt.clf()
 
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=SWE_deepAE
+#SBATCH --job-name=SWE_benchmark
 #SBATCH --output=%x.o%j
 #SBATCH --error=%x.e%j
 #SBATCH --nodes=1
@@ -20,6 +20,5 @@ conda activate swe-cv-pytorch
 # man tee
 # python -u 3dconv_deconv.py > train.out
 
-cd video-prediction-numeric-simulations
-python -u test_model.py
-
+cd ..
+python -u test.py -r ../datasets/baganza/ -dset ../datasets/arda.npy -weights runs/train_27_18_07_2021_17_31_01/model.weights -ls 2048 

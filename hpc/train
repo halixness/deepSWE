@@ -1,22 +1,23 @@
 #!/bin/bash
-#SBATCH --job-name=SWE_deepVAE
+#SBATCH --job-name=SWE_deepTraining
 #SBATCH --output=%x.o%j
 #SBATCH --error=%x.e%j
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --partition=gpu
 #SBATCH --mem=32G
 #SBATCH --time=23:00:00
 
 # al piu' 128gb di ram per gpu in media
 # con il comando 'seff' controllo efficienza memoria
+# --gres=gpu:1
 
 module load miniconda3
 source "$CONDA_PREFIX/etc/profile.d/conda.sh" 
 conda activate swe-cv-pytorch
 
-cd ../video-prediction-numeric-simulations
-python -u train.py -r ../datasets/baganza/ -dset ../datasets/arda.npy
+cd ..
+python -u train.py -r ../datasets/baganza/ -dset ../datasets/arda.npy -epochs 100 -lr 0.001 -ls 2048 -s 0.3
 
 
