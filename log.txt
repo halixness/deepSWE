@@ -178,3 +178,26 @@ Task:
 Punti da riunione:
 - Non fornire vettore unico velocitá, tenerli separati
 - Maschera attenzione: trovare un modo per calcolarla per il modello, velocitá non molto affidabile
+
+======= 22/07/2021 =======
+
+- usa vvx e vvy separati
+- usa MANNING oltre a BTM
+- UNet + LSTM
+- loss: somma profonditá previsione = somma profonditá y_true
+- 102s nel futuro con 9 quadrati -> cioé entro 3x3 quadrati vedo eventi (102 secondi di finestra temporale)
+- input: 9 celle profonditá, output: 1 cella centrale
+
+H = altezza massima
+G = 9,8
+- deltaT = 0,5*Lato quadrato / root(G*H)
+- deltaT —> per la simulazione
+deltaT = lasso di tempo prevedibile per considerare l'influenza di eventi entro L celle
+
+1) simulazione ogni minuto
+2) input 3x3 e output 1x1 centrale, tutti i canali 
+
+problemi:
+    - con UNet non posso modificare il decoder: le skip connections richiedono matrici uguali.
+      Quindi provo a far prevedere tutta la griglia 3x3
+    - al peggio: cambio architettura rete neurale, uso il semplice autoencoder

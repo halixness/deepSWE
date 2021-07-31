@@ -82,9 +82,25 @@ parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
 
 args = parser.parse_args()
 
-if args.root is None:
+if args.root is None and args.dataset_path is None:
     print("required: please specify a root path: -r /path")
     exit()
+
+# ----------------------
+if th.cuda.is_available():  
+    dev = "cuda:0" 
+else:  
+    dev = "cpu"  
+device = th.device(dev) 
+
+from models.unet.unet_model import R_UNet
+
+net = R_UNet(n_channels=4, n_classes=3).to(device)
+print(net(th.rand((5,4,256*3,256*3))))
+
+exit()
+# ----------------------
+    
 # -------------- Setting up the run
 
 num_run = len(os.listdir("runs/")) + 1
@@ -136,9 +152,7 @@ else:
 # Unison shuffle
 X, Y = unison_shuffled_copies(X, Y)
 
-
 X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
-
 
 print("DEP min: {}\nVEL min: {}\nBTM min: {}".format(
     np.min(X_train[:, :, :, :, :, 0]),
@@ -162,9 +176,12 @@ else:
 device = th.device(dev) 
 
 
-from models.resnet_vae import VAE
+from models.unet.unet_model import R_UNet
 
-net = VAE(args.latent_size).to(device)
+net = R_UNet(n_channels=4, n_classes=3).to(device)
+print(net(th.rand((1,1,4,256*3,256*3))))
+
+exit()
 
 '''
 weights_path = "runs/train_15_04_07_2021_23_28_19/model.weights"
