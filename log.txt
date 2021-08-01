@@ -181,7 +181,8 @@ Punti da riunione:
 
 ======= 22/07/2021 =======
 
-- usa vvx e vvy separati
+[x] usa vvx e vvy separati
+[x] ConvLSTM
 - usa MANNING oltre a BTM
 - UNet + LSTM
 - loss: somma profonditá previsione = somma profonditá y_true

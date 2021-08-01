@@ -201,6 +201,7 @@ optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
 losses = []
+avg_losses = []
 errors = []
 test_errors = []
 
@@ -210,7 +211,6 @@ epochs = args.epochs
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
-    running_loss = 0.0
     print("---- Epoch {}".format(epoch))
     for i, batch in enumerate(X_train):
 
@@ -225,14 +225,11 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         loss.backward()
         optimizer.step()
 
-        # print statistics
-        running_loss += loss.item()
-        losses.append(loss.item())
-        running_loss += loss.item()
-
         losses.append(loss.item())
 
-        if i == 0: print("batch {} - avg.loss {}".format(i, np.mean(losses)))
+        if i == 0: 
+            print("batch {} - avg.loss {}".format(i, np.mean(losses)))
+            avg_losses.append(np.mean(losses))
 
     if epoch % 3 == 0:
 
@@ -252,9 +249,9 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             ax.set_xticklabels([])
 
         # pick random datapoint from batch
-        x = np.random.randint(X_train[k].shape[0])
+        x = np.random.randint(X_test[k].shape[0])
 
-        for i, frame in enumerate(X_train[k, x]):
+        for i, frame in enumerate(X_test[k, x]):
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
         axs[i + 1].matshow(outputs[x][0].cpu().detach().numpy())
@@ -281,10 +278,10 @@ if args.test_flight is None:
 # Loss plot
 mpl.rcParams['text.color'] = 'k'
 
-plt.title("loss")
-plt.plot(range(len(losses)), losses)
+plt.title("average loss")
+plt.plot(range(len(avg_losses)), avg_losses)
 if args.test_flight is None:
-    plt.savefig("runs/" + foldername + "/loss.png")
+    plt.savefig("runs/" + foldername + "/avg_loss.png")
 plt.clf()
 
 
