@@ -10,8 +10,8 @@ class ResNetBlock(nn.Module):
 
         self.activation = nn.ReLU()
         self.c1 = nn.Conv2d(in_filters, filters, kernel_size, stride, padding=padding)
-        self.c2 = nn.Conv2d(filters, filters, kernel_size, padding=padding)
-        self.c3 = nn.Conv2d(in_filters, filters, (1, 1), stride)
+        self.c2 = nn.Conv2d(filters, filters, kernel_size, stride, padding=padding)
+        self.c3 = nn.Conv2d(in_filters, filters, (1, 1), stride, padding=padding)
 
         # self.bn = nn.BatchNorm3d(num_features=filters)
 
@@ -40,7 +40,7 @@ class ResNetAE(nn.Module):
         super(ResNetAE, self).__init__()
 
         kernel_size = 3
-        padding = 1
+        padding = 0
 
         # ------ Encoder
         self.encoder = nn.ModuleList([
@@ -49,13 +49,13 @@ class ResNetAE(nn.Module):
 
             ResNetBlock(in_filters=8, filters=8, stride=1, kernel_size=kernel_size, padding=padding),
 
-            nn.Conv2d(8, 16, 1),
+            nn.Conv2d(8, 16, 1, padding=padding),
             ResNetBlock(in_filters=16, filters=16, stride=1, kernel_size=kernel_size, padding=padding),
 
-            nn.Conv2d(16, 32, 1),
+            nn.Conv2d(16, 32, 1, padding=padding),
             ResNetBlock(in_filters=32, filters=32, stride=1, kernel_size=kernel_size, padding=padding),
 
-            nn.Conv2d(32, 64, 1),
+            nn.Conv2d(32, 64, 1, padding=padding),
             ResNetBlock(in_filters=64, filters=64, stride=1, kernel_size=kernel_size, padding=padding),
         ])
 

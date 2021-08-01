@@ -104,7 +104,7 @@ class DataGenerator():
 
     def get_data(self):
         'Generates batches of datapoints'
-        X, Y = self.__data_generation()
+        X, Y = self.__data_generation() # seq, t, h, w, c
         ex_X = None
         ex_Y = None
 
@@ -239,28 +239,28 @@ class DataGenerator():
                 btm_x[btm_x > 10e5] = 0
 
                 # --- X
-                rx = deps[:self.past_frames]
-                rx.resize((rx.shape[0], rx.shape[1], rx.shape[2], 1))
+                x_dep = deps[:self.past_frames]
+                x_dep.resize((x_dep.shape[0], x_dep.shape[1], x_dep.shape[2], 1))
 
-                rvx = vvx_s[:self.past_frames]
-                rvx.resize((rvx.shape[0], rvx.shape[1], rvx.shape[2], 1))
+                x_vx = vvx_s[:self.past_frames]
+                x_vx.resize((x_vx.shape[0], x_vx.shape[1], x_vx.shape[2], 1))
 
-                rvy = vvy_s[:self.past_frames]
-                rvy.resize((rvy.shape[0], rvy.shape[1], rvy.shape[2], 1))
+                x_vy = vvy_s[:self.past_frames]
+                x_vy.resize((x_vy.shape[0], x_vy.shape[1], x_vy.shape[2], 1))
+
+                x = np.concatenate((x_dep, x_vx, x_vy, btm_x), axis=3)
 
                 # --- Y
-                ry = deps[self.past_frames:]
-                ry.resize((ry.shape[0], ry.shape[1], ry.shape[2], 1))
+                y_dep = deps[self.past_frames:]
+                y_dep.resize((y_dep.shape[0], y_dep.shape[1], y_dep.shape[2], 1))
 
-                rvx = vvx_s[self.past_frames:]
-                rvx.resize((rvx.shape[0], rvx.shape[1], rvx.shape[2], 1))
+                y_vx = vvx_s[self.past_frames:]
+                y_vx.resize((y_vx.shape[0], y_vx.shape[1], y_vx.shape[2], 1))
 
-                rvy = vvy_s[self.past_frames:]
-                rvy.resize((rvy.shape[0], rvy.shape[1], rvy.shape[2], 1))
-                
-                # --- Datapoint
-                x = np.concatenate((rx, rvx, rvy, btm_x), axis=3)
-                y = np.concatenate((ry, rvx, rvy), axis=3)
+                y_vy = vvy_s[self.past_frames:]
+                y_vy.resize((y_vy.shape[0], y_vy.shape[1], y_vy.shape[2], 1))
+
+                y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
 
                 # filtering 
                 sequence = np.concatenate((x[:,:,:,:3], y), axis=0)
@@ -270,11 +270,11 @@ class DataGenerator():
                     
                     loaded += 1
 
-                    if X is None: X = x
-                    else: X = np.concatenate((X, x))
+                    if X is None: X = np.expand_dims(x,0)
+                    else: X = np.concatenate((X, np.expand_dims(x,0)))
 
-                    if Y is None: Y = y
-                    else: Y = np.concatenate((Y, y))
+                    if Y is None: Y = np.expand_dims(y,0)
+                    else: Y = np.concatenate((Y, np.expand_dims(y,0)))
                     
                     print(". ", end = '')
             

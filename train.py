@@ -57,7 +57,7 @@ parser.add_argument('-dset', dest='dataset_path',
                     help='path to a npy stored dataset')
 parser.add_argument('-r', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
-parser.add_argument('-p', dest='past_frames', default=1, type=int,
+parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
 parser.add_argument('-f', dest='future_frames', default=1, type=int, 
                     help='number of future frames')       
@@ -87,24 +87,10 @@ args = parser.parse_args()
 if args.root is None and args.dataset_path is None:
     print("required: please specify a root path: -r /path")
     exit()
-
-# ----------------------
-if th.cuda.is_available():  
-    dev = "cuda:0" 
-else:  
-    dev = "cpu"  
-device = th.device(dev) 
-
-from models.ae.resnet_ae import ResNetAE
-
-net = ResNetAE(channels=4).to(device)
-print(net(th.rand((1,4,256*3,256*3)).to(device)))
-
-exit()
-    
+   
 # -------------- Setting up the run
 
-if args.test_flight is not None:
+if args.test_flight is None:
     num_run = len(os.listdir("runs/")) + 1
     now = datetime.now()
     foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
@@ -177,13 +163,16 @@ else:
     dev = "cpu"  
 device = th.device(dev) 
 
+from models.resnet.convlstm import ConvLSTM
 
-from models.unet.unet_model import R_UNet
-
-net = R_UNet(n_channels=4, n_classes=3).to(device)
-print(net(th.rand((1,1,4,256*3,256*3))))
-
-exit()
+net = ConvLSTM(
+    input_dim = 4, 
+    hidden_dim = 3, 
+    kernel_size = (3,3), 
+    num_layers = 3, 
+    batch_first = True, 
+    bias = True, 
+    return_all_layers = False).to(device) # False: many to one
 
 '''
 weights_path = "runs/train_15_04_07_2021_23_28_19/model.weights"
@@ -225,31 +214,18 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         optimizer.zero_grad()
 
-        # ---- Masking the input
-        #attention_mask_in = th.unsqueeze(batch[:,1,:,:,:],1)
-        #plt.matshow(attention_mask_in.cpu().detach().numpy()[0,0,0])
-        #batch = th.matmul(attention_mask_in, batch)
-        
-        outputs = net(batch[:,:,0,:,:])
-
-        # ---- Masking the output
-        #attention_mask_out = th.unsqueeze(y_train[i,:,1,:,:,:],2)
-        #masked_outputs = th.matmul(attention_mask, outputs)
-        #masked_true_outputs = th.matmul(attention_mask_out, y_train[i])
+        # ---- Predicting
+        _, last_states = net(X_train[0])
+        outputs = last_states[0][-1]  # 0 for layer index, 0 for h index
 
         # ---- Loss and training
-        loss = criterion(outputs[0],  y_train[i,:,:,0,:,:])
+        loss = criterion(outputs,  y_train[i,:,:,0,:,:])
         loss.backward()
         optimizer.step()
-
-        '''
-        optimizer.zero_grad()
-        loss = -video_ssim(outputs, y_train[i])
-        loss.backward()
-        optimizer.step()
-        '''
 
         # print statistics
+        running_loss += loss.item()
+        losses.append(loss.item())
         running_loss += loss.item()
 
         losses.append(loss.item())
@@ -260,25 +236,35 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         k = np.random.randint(len(X_test))
 
-        outputs = net(X_test[k,:,:,0,:,:])
+        _, last_states = net(X_test[k])
+        outputs = last_states[0][-1]  # 0 for layer index, 0 for h index
 
         test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
         print("test loss: {}".format(test_loss.item()))
 
         #------------------------------
-        fig, axs = plt.subplots(1, outputs[0].shape[0], figsize=(plotsize,plotsize))
+        fig, axs = plt.subplots(1, X_test[k].shape[1] + outputs.shape[1], figsize=(plotsize,plotsize))
 
         for ax in axs:
             ax.set_yticklabels([])
             ax.set_xticklabels([])
 
-        for i,frame in enumerate(outputs[0]):
+        # pick random datapoint from batch
+        x = np.random.randint(X_test[k].shape[0])
+
+        for i,frame in enumerate(X_test[k,x]):
+            axs[i].matshow(frame[0].cpu().detach().numpy())
+
+        for i,frame in enumerate(outputs[x]):
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
         plt.show()
-        if args.test_flight is not None:
+
+        if args.test_flight is None:
             plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
+        
         plt.clf()
+        
         #------------------------------
 
         #if epoch % 10 == 0:
@@ -287,7 +273,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         #    running_loss = 0.0
 
 print('[!] Finished Training, storing weights...')
-if args.test_flight is not None:
+if args.test_flight is None:
     weights_path = "runs/" + foldername + "/model.weights"
     th.save(net.state_dict(), weights_path)
 
@@ -296,7 +282,7 @@ mpl.rcParams['text.color'] = 'k'
 
 plt.title("loss")
 plt.plot(range(len(losses)), losses)
-if args.test_flight is not None:
+if args.test_flight is None:
     plt.savefig("runs/" + foldername + "/loss.png")
 plt.clf()
 
