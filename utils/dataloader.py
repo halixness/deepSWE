@@ -281,7 +281,7 @@ class DataGenerator():
             print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
 
         # Buffer ratio calculation
-        if accesses is not 0:
+        if accesses != 0:
             self.buffer_hit_ratio = self.buffer_hit_ratio * 0.5 + 0.5 * (hits / accesses)
 
         return X, Y

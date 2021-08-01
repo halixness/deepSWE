@@ -187,11 +187,13 @@ X_test = th.Tensor(X_test).to(device)
 y_test = th.Tensor(y_test).to(device)
 
 # Channel-first conversion
-X_train = X_train.permute(0, 1, 5, 2, 3, 4)
-y_train = y_train.permute(0, 1, 5, 2, 3, 4)
 
-X_test = X_test.permute(0, 1, 5, 2, 3, 4)
-y_test = y_test.permute(0, 1, 5, 2, 3, 4)
+# b, s, t, h, w, c -> b, s, t, c, h, w
+X_train = X_train.permute(0, 1, 2, 5, 3, 4)
+y_train = y_train.permute(0, 1, 2, 5, 3, 4)
+
+X_test = X_test.permute(0, 1, 2, 5, 3, 4)
+y_test = y_test.permute(0, 1, 2, 5, 3, 4)
 
 criterion = nn.MSELoss() # reduction='sum'
 ssim_loss = pytorch_ssim.SSIM()
@@ -243,20 +245,19 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         print("test loss: {}".format(test_loss.item()))
 
         #------------------------------
-        fig, axs = plt.subplots(1, X_test[k].shape[1] + outputs.shape[1], figsize=(plotsize,plotsize))
+        fig, axs = plt.subplots(1, X_train.shape[2] + 1, figsize=(plotsize, plotsize))
 
         for ax in axs:
             ax.set_yticklabels([])
             ax.set_xticklabels([])
 
         # pick random datapoint from batch
-        x = np.random.randint(X_test[k].shape[0])
+        x = np.random.randint(X_train[k].shape[0])
 
-        for i,frame in enumerate(X_test[k,x]):
+        for i, frame in enumerate(X_train[k, x]):
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
-        for i,frame in enumerate(outputs[x]):
-            axs[i].matshow(frame[0].cpu().detach().numpy())
+        axs[i + 1].matshow(outputs[x][0].cpu().detach().numpy())
 
         plt.show()
 
