@@ -233,17 +233,17 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             print("batch {} - avg.loss {}".format(i, np.mean(losses)))
             avg_losses.append(np.mean(losses))
 
-    if epoch % 3 == 0:
+    if epoch % 2 == 0:
 
         k = np.random.randint(len(X_test))
 
-        outputs = net(X_train[k], 1)  # 0 for layer index, 0 for h index
+        outputs = net(X_test[k], 1)  # 0 for layer index, 0 for h index
 
         #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
         #print("test loss: {}".format(test_loss.item()))
 
         #------------------------------
-        fig, axs = plt.subplots(1, X_train.shape[2] + 1, figsize=(plotsize, plotsize))
+        fig, axs = plt.subplots(1, X_test.shape[2] + 2, figsize=(plotsize, plotsize))
 
         for ax in axs:
             ax.set_yticklabels([])
@@ -253,9 +253,14 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         x = np.random.randint(X_test[k].shape[0])
 
         for i, frame in enumerate(X_test[k, x]):
+            axs[i].title.set_text('t={}'.format(i))
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
         axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
+        axs[i+1].title.set_text('Predicted')
+
+        axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
+        axs[i+2].title.set_text('Ground Truth')
 
         plt.show()
 
