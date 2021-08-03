@@ -32,6 +32,20 @@ mat.use("Agg") # headless mode
 
 # -------------- Functions
 
+def mass_conservation_loss(output, target):
+    # output: b, h, w
+    diff = 0
+    for i,datapoint in enumerate(output):
+        diff += th.abs(
+            th.sum(
+                th.abs(output[i])
+            ) -
+            th.sum(
+                th.abs(target[i])
+            )
+        )
+    return diff**(1/2)
+
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
@@ -163,21 +177,9 @@ else:
     dev = "cpu"  
 device = th.device(dev) 
 
-from models.resnet.convlstm import ConvLSTM
+from models.ae import seq2seq_ConvLSTM
 
-net = ConvLSTM(
-    input_dim = 4, 
-    hidden_dim = 3, 
-    kernel_size = (3,3), 
-    num_layers = 3, 
-    batch_first = True, 
-    bias = True, 
-    return_all_layers = False).to(device) # False: many to one
-
-'''
-weights_path = "runs/train_15_04_07_2021_23_28_19/model.weights"
-net.load_state_dict(th.load(weights_path))
-'''
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=4, in_chan=4).to(device) # False: many to one
 
 # Device loading
 X_train = th.Tensor(X_train).to(device)
@@ -196,7 +198,7 @@ X_test = X_test.permute(0, 1, 2, 5, 3, 4)
 y_test = y_test.permute(0, 1, 2, 5, 3, 4)
 
 criterion = nn.MSELoss() # reduction='sum'
-ssim_loss = pytorch_ssim.SSIM()
+#ssim_loss = pytorch_ssim.SSIM()
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
@@ -217,11 +219,11 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         optimizer.zero_grad()
 
         # ---- Predicting
-        _, last_states = net(X_train[0])
-        outputs = last_states[0][-1]  # 0 for layer index, 0 for h index
+        outputs = net(batch, 1)  # 0 for layer index, 0 for h index
 
-        # ---- Loss and training
-        loss = criterion(outputs,  y_train[i,:,:,0,:,:])
+        # ---- Batch Loss
+        loss = criterion(outputs[:, 0, :, :], y_train[i, :, 0, 0, :, :])
+
         loss.backward()
         optimizer.step()
 
@@ -235,11 +237,10 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         k = np.random.randint(len(X_test))
 
-        _, last_states = net(X_test[k])
-        outputs = last_states[0][-1]  # 0 for layer index, 0 for h index
+        outputs = net(X_train[k], 1)  # 0 for layer index, 0 for h index
 
-        test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
-        print("test loss: {}".format(test_loss.item()))
+        #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
+        #print("test loss: {}".format(test_loss.item()))
 
         #------------------------------
         fig, axs = plt.subplots(1, X_train.shape[2] + 1, figsize=(plotsize, plotsize))
@@ -254,7 +255,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         for i, frame in enumerate(X_test[k, x]):
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
-        axs[i + 1].matshow(outputs[x][0].cpu().detach().numpy())
+        axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
 
         plt.show()
 

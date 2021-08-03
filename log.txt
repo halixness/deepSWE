@@ -202,3 +202,11 @@ problemi:
     - con UNet non posso modificare il decoder: le skip connections richiedono matrici uguali.
       Quindi provo a far prevedere tutta la griglia 3x3
     - al peggio: cambio architettura rete neurale, uso il semplice autoencoder
+
+======= 02/08/2021 =======
+- Riesco ad eseguire con ConvLSTM
+- Implementata custom loss da valutare: custom + MSE? o custom + SSIM?
+- problemi:
+    - le previsioni contengono anche il terreno, inoltre gli output della rete sono negativi!
+      forse devo creare un'architettura  (autoencoder) con funzioni relu
+    - valutare alternative a ConvLSTM: https://holmdk.github.io/2020/04/02/video_prediction.html
