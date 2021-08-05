@@ -66,7 +66,7 @@ class DataLoader():
         print("[~] Performing train/test split...")
 
         # Splitting
-        if test_size is None:
+        if test_size is not None:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.Y, test_size=test_size, random_state=42)
 
             # Device loading

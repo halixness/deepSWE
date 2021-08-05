@@ -13,10 +13,13 @@ import torch.optim as optim
 import torch.nn as nn
 import pytorch_ssim
 from torch.autograd import Variable
+
+from models.ae import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
 import argparse
 import pytorch_ssim
+import time
 
 mat.use("Agg") # headless mode
 #mat.rcParams['text.color'] = 'w'
@@ -143,19 +146,25 @@ dataset = DataLoader(
 )
 
 # -------------- Model
-net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels).to(device) # False: many to one
+if args.network == "conv":
+    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device) # False: many to one
+elif args.network == "nfnet":
+    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device)
+else:
+    raise Exception("Unkown network type given.")
 
 # Loading model weights from previous training
 print("[x] Loading model weights")
 net.load_state_dict(
-    th.load(args.weights_path),
-    map_location=torch.device(device)
+    th.load(args.weights_path)
 )
 net.eval() # evaluation mode
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
 # ------------------------------
+
+inference_times = []
 
 ssim = pytorch_ssim.SSIM()
 l1 = th.nn.L1Loss()
@@ -172,7 +181,10 @@ for t in range(args.n_tests):
     j = np.random.randint(len(X))       # random batch
     k = np.random.randint(len(X[j]))    # random datapoint
 
+    start = time.time()
     outputs = net(X[j], 1)
+    end = time.time()
+    inference_times.append(end - start)
 
     img1 = Variable(outputs[k, 0, :, :].unsqueeze(0), requires_grad=False)
     img2 = Variable(Y[j, k, 0, 0].unsqueeze(0).unsqueeze(0), requires_grad=True)
@@ -200,16 +212,16 @@ for t in range(args.n_tests):
     axs[i + 2].matshow(Y[j, k][0][0].cpu().detach().numpy())
     axs[i + 2].title.set_text('Ground Truth')
 
-    plt.show()
     if args.test_flight is None:
         plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(t))
-
 
 ssim_score = ssim_score/args.n_tests
 l1_score = l1_score/args.n_tests
 l2_score = l2_score/args.n_tests
 
-print("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
+stats = "SSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(ssim_score, l1_score, l2_score, np.mean(inference_times))
+
+print()
 
 text_file = open("runs/" + foldername + "/score.txt", "w")
 n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))

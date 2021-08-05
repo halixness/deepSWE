@@ -18,13 +18,9 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
-import pytorch_ssim
+import time
 
-from functools import partial
-import torch.nn.functional as F
-import torchvision.models as models
-from torch.autograd import Variable
-import torchvision.transforms as transforms
+from models.ae import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
 mat.use("Agg") # headless mode
@@ -59,6 +55,8 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
+parser.add_argument('-network', dest="network", default = "conv",
+                    help='Network type: conv/nfnet/(...)')
 parser.add_argument('-test_size', dest='test_size', default = 0.2,
                     help='Test size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
@@ -92,7 +90,11 @@ parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
 parser.add_argument('-epochs', dest='epochs', default=100, type=int,
                     help='training iterations')
 parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
-                    help='latent size for the VAE')                                                                                                                                                      
+                    help='latent size for the VAE')
+parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
+                    help='number of hidden layers')
+parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
+                    help='number of input channels')
 
 args = parser.parse_args()
 
@@ -135,7 +137,12 @@ dataset = DataLoader(
 )
 
 # ---- Model
-net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=4, in_chan=4).to(device) # False: many to one
+if args.network == "conv":
+    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device) # False: many to one
+elif args.network == "nfnet":
+    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device)
+else:
+    raise Exception("Unkown network type given.")
 
 criterion = nn.MSELoss(reduction='sum') # reduction='sum'
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
@@ -145,6 +152,7 @@ losses = []
 avg_losses = []
 errors = []
 test_errors = []
+training_times = []
 print("\n[!] It's training time!")
 
 X_train, y_train = dataset.get_train()
@@ -160,6 +168,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         optimizer.zero_grad()
 
         # ---- Predicting
+
+        start = time.time()
         outputs = net(batch, 1)  # 0 for layer index, 0 for h index
 
         # ---- Batch Loss
@@ -167,6 +177,9 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         loss.backward()
         optimizer.step()
+
+        end = time.time()
+        training_times.append(end - start)
 
         losses.append(loss.item())
 
@@ -217,6 +230,9 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         #          (epoch + 1, i + 1, running_loss / 2000))
         #    running_loss = 0.0
 
+end = time.time()
+print(end - start)
+
 print('[!] Finished Training, storing weights...')
 if args.test_flight is None:
     weights_path = "runs/" + foldername + "/model.weights"
@@ -230,6 +246,8 @@ plt.plot(range(len(avg_losses)), avg_losses)
 if args.test_flight is None:
     plt.savefig("runs/" + foldername + "/avg_loss.png")
 plt.clf()
+
+print("Avg.training time: {}".format(np.mean(training_times)))
 
 
 # In[26]:

@@ -1,7 +1,8 @@
 import torch
 from torch import nn, optim
 
-from nfnets.utils import unitwise_norm
+from models.ae.nfnets.utils import unitwise_norm
+
 from collections import Iterable
 
 

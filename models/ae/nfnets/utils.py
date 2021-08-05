@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from nfnets import WSConv2d
+from models.ae.nfnets.base import WSConv2d
 
 import warnings
 

@@ -1,8 +1,7 @@
 import torch
 from torch.optim.optimizer import Optimizer, required
 from torch import optim, nn
-
-import utils.unitwise_norm
+from models.ae.nfnets.utils import unitwise_norm
 
 class SGD_AGC(Optimizer):
     r"""Implements stochastic gradient descent (optionally with momentum).
