@@ -1,4 +1,3 @@
-
 # coding: utf-8
 
 # In[20]:
@@ -20,7 +19,7 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
-import pytorch_ssim
+import pytorch_lightning as pl
 
 from functools import partial
 import torch.nn.functional as F
@@ -28,14 +27,15 @@ import torchvision.models as models
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 
-mat.use("Agg") # headless mode
+mat.use("Agg")  # headless mode
+
 
 # -------------- Functions
 
 def mass_conservation_loss(output, target):
     # output: b, h, w
     diff = 0
-    for i,datapoint in enumerate(output):
+    for i, datapoint in enumerate(output):
         diff += th.abs(
             th.sum(
                 th.abs(output[i])
@@ -44,12 +44,14 @@ def mass_conservation_loss(output, target):
                 th.abs(target[i])
             )
         )
-    return diff**(1/2)
+    return diff ** (1 / 2)
+
 
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
     return a[p], b[p]
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -60,6 +62,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 # -------------------------------
 
@@ -72,36 +75,36 @@ parser.add_argument('-dset', dest='dataset_path',
 parser.add_argument('-r', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
-                    help='number of past frames')       
-parser.add_argument('-f', dest='future_frames', default=1, type=int, 
-                    help='number of future frames')       
+                    help='number of past frames')
+parser.add_argument('-f', dest='future_frames', default=1, type=int,
+                    help='number of future frames')
 parser.add_argument('-s', dest='partial', default=None, type=float,
-                    help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
+                    help='percentage of portion of dataset (to load partial, lighter chunks)')
 parser.add_argument('-i', dest='image_size', default=256, type=int,
                     help='image size (width = height)')
 parser.add_argument('-b', dest='batch_size', default=4, type=int,
-                    help='batch size') 
+                    help='batch size')
 parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
-                    help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
+                    help='dynamicity rate (to filter out "dynamic" sequences)')
 parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
                     help='size of the cache memory (in entries)')
 parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
-                    help='temporal length of the cache memory (in iterations)')                                                                                                  
+                    help='temporal length of the cache memory (in iterations)')
 parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
-                    const=True, help='enable 2x downsampling (with gaussian filter)')  
+                    const=True, help='enable 2x downsampling (with gaussian filter)')
 parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
-                    help='learning rate')                                              
+                    help='learning rate')
 parser.add_argument('-epochs', dest='epochs', default=100, type=int,
                     help='training iterations')
 parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
-                    help='latent size for the VAE')                                                                                                                                                      
+                    help='latent size for the VAE')
 
 args = parser.parse_args()
 
 if args.root is None and args.dataset_path is None:
     print("required: please specify a root path: -r /path")
     exit()
-   
+
 # -------------- Setting up the run
 
 if args.test_flight is None:
@@ -111,6 +114,33 @@ if args.test_flight is None:
     os.mkdir("runs/" + foldername)
 
 # -------------------------------
+
+class LitAutoEncoder(pl.LightningModule):
+    def __init__(self):
+        super().__init__()
+        self.encoder = nn.Sequential(nn.Linear(28 * 28, 64), nn.ReLU(), nn.Linear(64, 3))
+        self.decoder = nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 28 * 28))
+
+    def forward(self, x):
+        # in lightning, forward defines the prediction/inference actions
+        embedding = self.encoder(x)
+        return embedding
+
+    def training_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y = batch
+        x = x.view(x.size(0), -1)
+        z = self.encoder(x)
+        x_hat = self.decoder(z)
+        loss = F.mse_loss(x_hat, x)
+        # Logging to TensorBoard by default
+        self.log("train_loss", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
 
 plotsize = 15
 
@@ -127,7 +157,7 @@ if args.dataset_path is None:
     dataset = DataGenerator(
         root=args.root,
         dataset_partitions=partitions.get_partitions(),
-        past_frames=partitions.past_frames, 
+        past_frames=partitions.past_frames,
         future_frames=partitions.future_frames,
         input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
         output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
@@ -135,13 +165,12 @@ if args.dataset_path is None:
         buffer_size=args.buffer_size,
         buffer_memory=args.buffer_memory,
         downsampling=False,
-        dynamicity = args.dynamicity
+        dynamicity=args.dynamicity
     )
-
 
     X, Y, extra_batch = dataset.get_data()
 
-    X[X > 10e5] = 0 
+    X[X > 10e5] = 0
     Y[Y > 10e5] = 0
 
 # ---- Otherwise load stored file
@@ -168,18 +197,17 @@ print("DEP max: {}\nVEL max: {}\nBTM max: {}".format(
     np.max(X_train[:, :, :, :, :, 2])
 ))
 
-
 # ---- Model
 
-if th.cuda.is_available():  
-    dev = "cuda:0" 
-else:  
-    dev = "cpu"  
-device = th.device(dev) 
+if th.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = th.device(dev)
 
 from models.ae import seq2seq_ConvLSTM
 
-net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=4, in_chan=4).to(device) # False: many to one
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=4, in_chan=4).to(device)  # False: many to one
 
 # Device loading
 X_train = th.Tensor(X_train).to(device)
@@ -197,8 +225,8 @@ y_train = y_train.permute(0, 1, 2, 5, 3, 4)
 X_test = X_test.permute(0, 1, 2, 5, 3, 4)
 y_test = y_test.permute(0, 1, 2, 5, 3, 4)
 
-criterion = nn.MSELoss(reduction='sum') # reduction='sum'
-#ssim_loss = pytorch_ssim.SSIM()
+criterion = nn.MSELoss(reduction='sum')  # reduction='sum'
+# ssim_loss = pytorch_ssim.SSIM()
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
@@ -229,7 +257,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         losses.append(loss.item())
 
-        if i == 0: 
+        if i == 0:
             print("batch {} - avg.loss {}".format(i, np.mean(losses)))
             avg_losses.append(np.mean(losses))
 
@@ -239,10 +267,10 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         outputs = net(X_test[k], 1)  # 0 for layer index, 0 for h index
 
-        #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
-        #print("test loss: {}".format(test_loss.item()))
+        # test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
+        # print("test loss: {}".format(test_loss.item()))
 
-        #------------------------------
+        # ------------------------------
         fig, axs = plt.subplots(1, X_test.shape[2] + 2, figsize=(plotsize, plotsize))
 
         for ax in axs:
@@ -256,22 +284,22 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             axs[i].title.set_text('t={}'.format(i))
             axs[i].matshow(frame[0].cpu().detach().numpy())
 
-        axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
-        axs[i+1].title.set_text('Predicted')
+        axs[i + 1].matshow(outputs[x][0][0].cpu().detach().numpy())
+        axs[i + 1].title.set_text('Predicted')
 
-        axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
-        axs[i+2].title.set_text('Ground Truth')
+        axs[i + 2].matshow(y_test[k, x][0][0].cpu().detach().numpy())
+        axs[i + 2].title.set_text('Ground Truth')
 
         plt.show()
 
         if args.test_flight is None:
             plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
-        
-        plt.clf()
-        
-        #------------------------------
 
-        #if epoch % 10 == 0:
+        plt.clf()
+
+        # ------------------------------
+
+        # if epoch % 10 == 0:
         #    print('[%d, %5d] loss: %.3f' %
         #          (epoch + 1, i + 1, running_loss / 2000))
         #    running_loss = 0.0
@@ -289,7 +317,6 @@ plt.plot(range(len(avg_losses)), avg_losses)
 if args.test_flight is None:
     plt.savefig("runs/" + foldername + "/avg_loss.png")
 plt.clf()
-
 
 # In[26]:
 '''

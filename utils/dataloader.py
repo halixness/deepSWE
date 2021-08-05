@@ -5,6 +5,58 @@ import math
 import cv2 as cv
 from utils.preprocessing import Preprocessing
 
+def unison_shuffled_copies(a, b):
+    assert len(a) == len(b)
+    p = np.random.permutation(len(a))
+    return a[p], b[p]
+
+class DataLoader():
+    def __init__(self, dataset_path, past_frames, future_frames, root, buffer_size, image_size, batch_size, buffer_memory, dynamicity, downsampling=False, partial=None, clipping_threshold=1e5):
+        if root is None:
+            raise Exception("Please specify a root path: -r /path")
+
+        # Loads from disk
+        if dataset_path is None:
+            self.partitions = DataPartitions(
+                past_frames=past_frames,
+                future_frames=future_frames,
+                root=root,
+                partial=partial
+            )
+
+            self.dataset = DataGenerator(
+                root=root,
+                dataset_partitions=self.partitions.get_partitions(),
+                past_frames=self.partitions.past_frames,
+                future_frames=self.partitions.future_frames,
+                input_dim=(self.partitions.past_frames, image_size, image_size, 4),
+                output_dim=(self.partitions.future_frames, image_size, image_size, 3),
+                batch_size=batch_size,
+                buffer_size=buffer_size,
+                buffer_memory=buffer_memory,
+                downsampling=False,
+                dynamicity=dynamicity
+            )
+            self.X, self.Y, self.extra_batch = self.dataset.get_data()
+
+            self.X[self.X > clipping_threshold] = 0
+            self.Y[self.Y > clipping_threshold] = 0
+
+        # Loads from stored file
+        else:
+            self.X, self.Y, self.extra_batch = np.load(dataset_path, allow_pickle=True)
+            print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
+                dataset_path, self.X.shape, self.Y.shape
+            ))
+
+        #  Shuffling the dataset
+        
+
+
+
+
+# ------------------------------------------------------------------------------
+
 class DataPartitions():
     def __init__(self, past_frames, future_frames, root, partial=None):
 
@@ -110,16 +162,16 @@ class DataGenerator():
 
         batch_residual = X.shape[0] % self.batch_size
         n_batches = X.shape[0] // self.batch_size
-        
+
         # In case of n_sequences =/= k*batch_size
         if batch_residual > 0:
             X_b = X[:-batch_residual].reshape((n_batches, self.batch_size, *self.input_dim))
             Y_b = Y[:-batch_residual].reshape((n_batches, self.batch_size, *self.output_dim))
-            
+
             # extra batch with n < batch_size
             ex_X = np.array([[X[-batch_residual:]]])
             ex_Y = np.array([[Y[-batch_residual:]]])
-            
+
         else:
             X_b = X.reshape((n_batches, self.batch_size, *self.input_dim))
             Y_b = Y.reshape((n_batches, self.batch_size, *self.output_dim))
@@ -262,12 +314,12 @@ class DataGenerator():
 
                 y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
 
-                # filtering 
+                # filtering
                 sequence = np.concatenate((x[:,:,:,:3], y), axis=0)
                 score, valid = self.preprocessing.eval_datapoint(sequence, self.dynamicity)
 
                 if valid:
-                    
+
                     loaded += 1
 
                     if X is None: X = np.expand_dims(x,0)
@@ -275,9 +327,9 @@ class DataGenerator():
 
                     if Y is None: Y = np.expand_dims(y,0)
                     else: Y = np.concatenate((Y, np.expand_dims(y,0)))
-                    
+
                     print(". ", end = '')
-            
+
             print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
 
         # Buffer ratio calculation

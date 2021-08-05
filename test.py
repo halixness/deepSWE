@@ -8,7 +8,6 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import matplotlib as mat
 
-from models.resnet_ae import ResNetAE
 import torch as th
 import torch.optim as optim
 import torch.nn as nn
@@ -16,6 +15,7 @@ import pytorch_ssim
 from torch.autograd import Variable
 
 import argparse
+import pytorch_ssim
 
 mat.use("Agg") # headless mode
 #mat.rcParams['text.color'] = 'w'
@@ -58,6 +58,15 @@ def reverse_ssim(y, y_true):
 
 parser = argparse.ArgumentParser(description='Tests a train model against a given dataset')
 
+
+parser.add_argument('-tf', dest='test_flight',
+                    help='Test flight. Avoids creating a train folder for this session.')
+parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
+                    help='number of hidden layers')
+parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
+                    help='number of input channels')
+parser.add_argument('-tests', dest='n_tests', default=10, type=int,
+                    help='number of tests to perform')
 parser.add_argument('-weights', dest='weights_path',
                     help='model weights for testing')
 parser.add_argument('-dset', dest='dataset_path',
@@ -92,7 +101,7 @@ if args.root is None:
     exit()
 
 if args.weights_path is None:
-    print("required: please specify a path for the weights file: -weights /path/model.weights")
+    print("required: please specify a path for the weights: -weights /path/model.weights")
     exit()
 
 # -------------- 
@@ -107,10 +116,11 @@ print("[x] Benchmark initialized, loading dataset...")
 
 # -------------- Setting up the run
 
-num_run = len(os.listdir("runs/")) + 1
-now = datetime.now()
-foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
-os.mkdir("runs/" + foldername)
+if args.test_flight is None:
+    num_run = len(os.listdir("runs/")) + 1
+    now = datetime.now()
+    foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+    os.mkdir("runs/" + foldername)
 
 # -------------- Data definition
 
@@ -170,42 +180,78 @@ print("DEP min: {}\nVEL min: {}\nBTM min: {}".format(
 X = th.Tensor(X).to(device)
 Y = th.Tensor(Y).to(device)
 
-X = X.permute(0, 1, 5, 2, 3, 4)
-Y = Y.permute(0, 1, 5, 2, 3, 4)
+# b, s, t, h, w, c -> b, s, t, c, h, w
+X = X.permute(0, 1, 2, 5, 3, 4)
+Y = Y.permute(0, 1, 2, 5, 3, 4)
 
 # -------------- Model
 
-from models.resnet_vae import VAE
-
-net = VAE(args.latent_size).to(device)
+from models.ae import seq2seq_ConvLSTM
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels).to(device) # False: many to one
 
 # Loading model weights from previous training
 print("[x] Loading model weights")
 net.load_state_dict(th.load(args.weights_path))
-net.eval()
-
-j = np.random.randint(len(X))       # random batch
-k = np.random.randint(len(X[j]))    # random datapoint
-outputs = net(X[j,:,:,0,:,:])
+net.eval() # evaluation mode
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
 # ------------------------------
-fig, axs = plt.subplots(X[j].shape[0], 3, figsize=(plotsize, plotsize))
-# batch, channel, w, h
+ssim = pytorch_ssim.SSIM()
+l1 = th.nn.L1Loss()
+l2 = th.nn.MSELoss()
 
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
+ssim_score = 0
+l1_score = 0
+l2_score = 0
 
-# for each sequence in batch
-for i, frame in enumerate(outputs[0]):
-    axs[i][0].matshow(X[j,i,0,0].cpu().detach().numpy())
-    axs[i][1].matshow(Y[j,i,0,0].cpu().detach().numpy())
-    axs[i][2].matshow(outputs[0][i,0].cpu().detach().numpy())
+for t in range(args.n_tests):
 
-plt.show()
-plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(j))
+    j = np.random.randint(len(X))       # random batch
+    k = np.random.randint(len(X[j]))    # random datapoint
+
+    outputs = net(X[j], 1)
+
+    img1 = Variable(outputs[k, 0, :, :].unsqueeze(0), requires_grad=False)
+    img2 = Variable(Y[j, k, 0, 0].unsqueeze(0).unsqueeze(0), requires_grad=True)
+
+    ssim_score += ssim(img1, img2)
+    l1_score += l1(img1, img2)
+    l2_score += l2(img1, img2)
+
+    fig, axs = plt.subplots(1, X.shape[2] + 2, figsize=(plotsize, plotsize))
+
+    for ax in axs:
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
+
+    # pick random datapoint from batch
+    x = np.random.randint(X[j].shape[0])
+
+    for i, frame in enumerate(X[j, k]):
+        axs[i].title.set_text('t={}'.format(i))
+        axs[i].matshow(frame[0].cpu().detach().numpy())
+
+    axs[i + 1].matshow(outputs[k][0][0].cpu().detach().numpy())
+    axs[i + 1].title.set_text('Predicted')
+
+    axs[i + 2].matshow(Y[j, k][0][0].cpu().detach().numpy())
+    axs[i + 2].title.set_text('Ground Truth')
+
+    plt.show()
+    if args.test_flight is None:
+        plt.savefig("runs/" + foldername + "/eval_prediction_{}.png".format(t))
+
+
+ssim_score = ssim_score/args.n_tests
+l1_score = l1_score/args.n_tests
+l2_score = l2_score/args.n_tests
+
+print("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
+
+text_file = open("runs/" + foldername + "/score.txt", "w")
+n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
+text_file.close()
 
 # ------------------------------
 '''
