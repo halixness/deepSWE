@@ -1,7 +1,7 @@
 # %%
 import os
 from datetime import datetime
-from utils.dataloader import DataPartitions, DataGenerator
+from utils.dataloader import DataLoader,DataPartitions, DataGenerator
 import numpy as np
 from sklearn.model_selection import train_test_split
 
@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.nn as nn
 import pytorch_ssim
 from torch.autograd import Variable
+from models.ae import seq2seq_ConvLSTM
 
 import argparse
 import pytorch_ssim
@@ -32,11 +33,6 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-def unison_shuffled_copies(a, b):
-    assert len(a) == len(b)
-    p = np.random.permutation(len(a))
-    return a[p], b[p]
-
 def reverse_ssim(y, y_true):
     tot_ssim = 0
     # for each sequence
@@ -54,13 +50,19 @@ def reverse_ssim(y, y_true):
 
     return 1 / (tot_ssim / len(y))
 
-    # -------------------------------
+# -------------------------------
 
 parser = argparse.ArgumentParser(description='Tests a train model against a given dataset')
 
 
+parser.add_argument('-test_size', dest='test_size', default = 0.2,
+                    help='Test size for the split')
+parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
+                    help='Shuffle the dataset')
 parser.add_argument('-tf', dest='test_flight',
                     help='Test flight. Avoids creating a train folder for this session.')
+parser.add_argument('-npy', dest='numpy_file',
+                    help='path to a npy stored dataset')
 parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
@@ -96,23 +98,15 @@ parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
 
 args = parser.parse_args()
 
-if args.root is None:
+if args.root is None and args.numpy_file is None:
     print("required: please specify a root path: -r /path")
     exit()
 
 if args.weights_path is None:
-    print("required: please specify a path for the weights: -weights /path/model.weights")
+    print("required: please specify a weights path: -weights /*.weights")
     exit()
 
-# -------------- 
-
-if th.cuda.is_available():
-    dev = "cuda:0"
-else:
-    dev = "cpu"
-device = th.device(dev)
-
-print("[x] Benchmark initialized, loading dataset...")
+print("[~] Benchmark initialized, loading dataset...")
 
 # -------------- Setting up the run
 
@@ -123,80 +117,46 @@ if args.test_flight is None:
     os.mkdir("runs/" + foldername)
 
 # -------------- Data definition
+if th.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = th.device(dev)
 
 plotsize = 15
 
-# ---- No dataset file: load from dir
-if args.dataset_path is None:
-
-    partitions = DataPartitions(
-        past_frames=args.past_frames,
-        future_frames=args.future_frames,
-        root=args.root,
-        partial=args.partial
-    )
-
-    dataset = DataGenerator(
-        root=args.root,
-        dataset_partitions=partitions.get_partitions(),
-        past_frames=partitions.past_frames, 
-        future_frames=partitions.future_frames,
-        input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
-        output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
-        batch_size=args.batch_size,
-        buffer_size=args.buffer_size,
-        buffer_memory=args.buffer_memory,
-        downsampling=False,
-        dynamicity = args.dynamicity
-    )
-
-
-    X, Y, extra_batch = dataset.get_data()
-
-    X[X > 10e5] = 0 
-    Y[Y > 10e5] = 0
-
-# ---- Otherwise load stored file
-else:
-    X, Y, extra_batch = np.load(args.dataset_path, allow_pickle=True)
-    print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
-        args.dataset_path, X.shape, Y.shape
-    ))
-
-# -------------- Data preprocessing
-
-print("[x] Preprocessing started...")
-
-# Shuffle batches
-X, Y = unison_shuffled_copies(X, Y)
-
-print("DEP min: {}\nVEL min: {}\nBTM min: {}".format(
-    np.min(X[:, :, :, :, :, 0]),
-    np.min(X[:, :, :, :, :, 1]),
-    np.min(X[:, :, :, :, :, 2])
-))
-
-# Load on GPU and convert to channel-first (for Torch)
-X = th.Tensor(X).to(device)
-Y = th.Tensor(Y).to(device)
-
-# b, s, t, h, w, c -> b, s, t, c, h, w
-X = X.permute(0, 1, 2, 5, 3, 4)
-Y = Y.permute(0, 1, 2, 5, 3, 4)
+dataset = DataLoader(
+    root=args.root, 
+    numpy_file=args.numpy_file, 
+    past_frames=args.past_frames, 
+    future_frames=args.future_frames, 
+    image_size=args.image_size, 
+    batch_size=args.batch_size, 
+    buffer_size=args.buffer_size, 
+    buffer_memory=args.buffer_memory, 
+    dynamicity=args.dynamicity, 
+    partial=args.partial, 
+    test_size=args.test_size, 
+    clipping_threshold=1e5, 
+    shuffle=args.shuffle,
+    device=device
+)
 
 # -------------- Model
-
-from models.ae import seq2seq_ConvLSTM
 net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels).to(device) # False: many to one
 
 # Loading model weights from previous training
 print("[x] Loading model weights")
-net.load_state_dict(th.load(args.weights_path))
+net.load_state_dict(
+    th.load(args.weights_path),
+    map_location=torch.device(device)
+)
 net.eval() # evaluation mode
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
 # ------------------------------
+
 ssim = pytorch_ssim.SSIM()
 l1 = th.nn.L1Loss()
 l2 = th.nn.MSELoss()
@@ -204,6 +164,8 @@ l2 = th.nn.MSELoss()
 ssim_score = 0
 l1_score = 0
 l2_score = 0
+
+X, Y = dataset.get_dataset()
 
 for t in range(args.n_tests):
 

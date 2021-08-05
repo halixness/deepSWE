@@ -4,19 +4,27 @@ from tqdm import tqdm
 import math
 import cv2 as cv
 from utils.preprocessing import Preprocessing
+from sklearn.model_selection import train_test_split
+import torch as th
 
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
     return a[p], b[p]
 
+# ------------------------------------------------------------------------------
+
 class DataLoader():
-    def __init__(self, dataset_path, past_frames, future_frames, root, buffer_size, image_size, batch_size, buffer_memory, dynamicity, downsampling=False, partial=None, clipping_threshold=1e5):
-        if root is None:
-            raise Exception("Please specify a root path: -r /path")
+    def __init__(self, numpy_file, past_frames, future_frames, root, buffer_size, image_size, batch_size, buffer_memory, dynamicity, downsampling=False, partial=None, clipping_threshold=1e5, test_size=0.2, shuffle=True, device="cpu"):
+        ''' Initiates the dataloading process '''
+
+        if root is None and numpy_file is None:
+            raise Exception("Please specify either a root path or a numpy file: -r /path -npy /dataset.py")
 
         # Loads from disk
-        if dataset_path is None:
+        if numpy_file is None:
+            print("[~] Loading from disk...")
+
             self.partitions = DataPartitions(
                 past_frames=past_frames,
                 future_frames=future_frames,
@@ -44,16 +52,75 @@ class DataLoader():
 
         # Loads from stored file
         else:
-            self.X, self.Y, self.extra_batch = np.load(dataset_path, allow_pickle=True)
+            print("[~] Loading from npy file...")
+
+            self.X, self.Y, self.extra_batch = np.load(numpy_file, allow_pickle=True)
             print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
-                dataset_path, self.X.shape, self.Y.shape
+                numpy_file, self.X.shape, self.Y.shape
             ))
 
         #  Shuffling the dataset
+        if shuffle:
+            self.X, self.Y = unison_shuffled_copies(self.X, self.Y)
+
+        print("[~] Performing train/test split...")
+
+        # Splitting
+        if test_size is None:
+            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.Y, test_size=test_size, random_state=42)
+
+            # Device loading
+            self.X_train = th.Tensor(self.X_train).to(device)
+            self.y_train = th.Tensor(self.y_train).to(device)
+
+            self.X_test = th.Tensor(self.X_test).to(device)
+            self.y_test = th.Tensor(self.y_test).to(device)
+
+            # Channel-first conversion
+            # b, s, t, h, w, c -> b, s, t, c, h, w
+            self.X_train = self.X_train.permute(0, 1, 2, 5, 3, 4)
+            self.y_train = self.y_train.permute(0, 1, 2, 5, 3, 4)
+
+            self.X_test = self.X_test.permute(0, 1, 2, 5, 3, 4)
+            self.y_test = self.y_test.permute(0, 1, 2, 5, 3, 4)        
         
+        else:
+            self.X = th.Tensor(self.X).to(device)
+            self.Y = th.Tensor(self.Y).to(device)
 
+            # Channel-first conversion
+            # b, s, t, h, w, c -> b, s, t, c, h, w
+            self.X = self.X.permute(0, 1, 2, 5, 3, 4)
+            self.Y = self.Y.permute(0, 1, 2, 5, 3, 4)
 
+        print("[!] Preprocessing completed!")
 
+    def get_dataset(self):
+        ''' Get train dataset '''
+        return self.X, self.Y
+
+    def get_train(self):
+        ''' Get train dataset '''
+        return self.X_train, self.y_train
+
+    def get_test(self):
+        ''' Get test dataset '''
+        return self.X_test, self.y_test
+
+    def print_stats(self):
+        ''' Prints dataset statistics'''
+
+        print("DEP min: {}\nVEL min: {}\nBTM min: {}".format(
+            np.min(self.X_train[:, :, :, :, :, 0]),
+            np.min(self.X_train[:, :, :, :, :, 1]),
+            np.min(self.X_train[:, :, :, :, :, 2])
+        ))
+
+        print("DEP max: {}\nVEL max: {}\nBTM max: {}".format(
+            np.max(self.X_train[:, :, :, :, :, 0]),
+            np.max(self.X_train[:, :, :, :, :, 1]),
+            np.max(self.X_train[:, :, :, :, :, 2])
+        ))                
 
 # ------------------------------------------------------------------------------
 
@@ -367,5 +434,3 @@ class DataGenerator():
                         del self.buffer[i]
             # Push
             self.buffer.append({'fresh': self.buffer_memory, 'global_id': k, 'value': x})
-
-

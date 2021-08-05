@@ -4,10 +4,8 @@
 # In[20]:
 
 
-from utils.dataloader import DataPartitions, DataGenerator
+from utils.dataloader import DataLoader, DataPartitions, DataGenerator
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
@@ -27,6 +25,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 from torch.autograd import Variable
 import torchvision.transforms as transforms
+from models.ae import seq2seq_ConvLSTM
 
 mat.use("Agg") # headless mode
 
@@ -46,11 +45,6 @@ def mass_conservation_loss(output, target):
         )
     return diff**(1/2)
 
-def unison_shuffled_copies(a, b):
-    assert len(a) == len(b)
-    p = np.random.permutation(len(a))
-    return a[p], b[p]
-
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -65,9 +59,13 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
+parser.add_argument('-test_size', dest='test_size', default = 0.2,
+                    help='Test size for the split')
+parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
+                    help='Shuffle the dataset')
 parser.add_argument('-tf', dest='test_flight',
                     help='Test flight. Avoids creating a train folder for this session.')
-parser.add_argument('-dset', dest='dataset_path',
+parser.add_argument('-npy', dest='numpy_file',
                     help='path to a npy stored dataset')
 parser.add_argument('-r', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
@@ -98,7 +96,7 @@ parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
 
 args = parser.parse_args()
 
-if args.root is None and args.dataset_path is None:
+if args.root is None and args.numpy_file is None:
     print("required: please specify a root path: -r /path")
     exit()
    
@@ -111,94 +109,35 @@ if args.test_flight is None:
     os.mkdir("runs/" + foldername)
 
 # -------------------------------
-
-plotsize = 15
-
-# ---- No dataset file: load from dir
-if args.dataset_path is None:
-
-    partitions = DataPartitions(
-        past_frames=args.past_frames,
-        future_frames=args.future_frames,
-        root=args.root,
-        partial=args.partial
-    )
-
-    dataset = DataGenerator(
-        root=args.root,
-        dataset_partitions=partitions.get_partitions(),
-        past_frames=partitions.past_frames, 
-        future_frames=partitions.future_frames,
-        input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
-        output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
-        batch_size=args.batch_size,
-        buffer_size=args.buffer_size,
-        buffer_memory=args.buffer_memory,
-        downsampling=False,
-        dynamicity = args.dynamicity
-    )
-
-
-    X, Y, extra_batch = dataset.get_data()
-
-    X[X > 10e5] = 0 
-    Y[Y > 10e5] = 0
-
-# ---- Otherwise load stored file
-else:
-    X, Y, extra_batch = np.load(args.dataset_path, allow_pickle=True)
-    print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
-        args.dataset_path, X.shape, Y.shape
-    ))
-
-# Unison shuffle
-X, Y = unison_shuffled_copies(X, Y)
-
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
-
-print("DEP min: {}\nVEL min: {}\nBTM min: {}".format(
-    np.min(X_train[:, :, :, :, :, 0]),
-    np.min(X_train[:, :, :, :, :, 1]),
-    np.min(X_train[:, :, :, :, :, 2])
-))
-
-print("DEP max: {}\nVEL max: {}\nBTM max: {}".format(
-    np.max(X_train[:, :, :, :, :, 0]),
-    np.max(X_train[:, :, :, :, :, 1]),
-    np.max(X_train[:, :, :, :, :, 2])
-))
-
-
-# ---- Model
-
 if th.cuda.is_available():  
     dev = "cuda:0" 
 else:  
     dev = "cpu"  
 device = th.device(dev) 
 
-from models.ae import seq2seq_ConvLSTM
+plotsize = 15
 
+dataset = DataLoader(
+    root=args.root, 
+    numpy_file=args.numpy_file, 
+    past_frames=args.past_frames, 
+    future_frames=args.future_frames, 
+    image_size=args.image_size, 
+    batch_size=args.batch_size, 
+    buffer_size=args.buffer_size, 
+    buffer_memory=args.buffer_memory, 
+    dynamicity=args.dynamicity, 
+    partial=args.partial, 
+    test_size=args.test_size, 
+    clipping_threshold=1e5, 
+    shuffle=args.shuffle,
+    device=device
+)
+
+# ---- Model
 net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=4, in_chan=4).to(device) # False: many to one
 
-# Device loading
-X_train = th.Tensor(X_train).to(device)
-y_train = th.Tensor(y_train).to(device)
-
-X_test = th.Tensor(X_test).to(device)
-y_test = th.Tensor(y_test).to(device)
-
-# Channel-first conversion
-
-# b, s, t, h, w, c -> b, s, t, c, h, w
-X_train = X_train.permute(0, 1, 2, 5, 3, 4)
-y_train = y_train.permute(0, 1, 2, 5, 3, 4)
-
-X_test = X_test.permute(0, 1, 2, 5, 3, 4)
-y_test = y_test.permute(0, 1, 2, 5, 3, 4)
-
 criterion = nn.MSELoss(reduction='sum') # reduction='sum'
-#ssim_loss = pytorch_ssim.SSIM()
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
@@ -206,8 +145,10 @@ losses = []
 avg_losses = []
 errors = []
 test_errors = []
+print("\n[!] It's training time!")
 
-print("\n[x] It's training time!")
+X_train, y_train = dataset.get_train()
+X_test, y_test = dataset.get_test()
 
 epochs = args.epochs
 
