@@ -21,4 +21,4 @@ conda activate swe-cv-pytorch
 # python -u 3dconv_deconv.py > train.out
 
 cd ..
-python -u test.py -r ../datasets/baganza/ -dset ../datasets/arda.npy -weights runs/train_27_18_07_2021_17_31_01/model.weights -ls 2048 
+python -u test.py -r ../datasets/baganza/ -npy ../datasets/arda.npy -weights runs/train_45_10_08_2021_19_28_41/model.weights -ls 2048 

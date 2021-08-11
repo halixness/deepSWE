@@ -2,3 +2,5 @@
 **/runs/*
 **/__pycache__/*
 **/SWE_*
+__pycache__/
+*.py[cod]
