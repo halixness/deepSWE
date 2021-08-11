@@ -60,7 +60,7 @@ parser = argparse.ArgumentParser(description='Tests a train model against a give
 
 parser.add_argument('-network', dest='network', default = "conv",
                     help='Type of architecture: conv/nfnet/...')
-parser.add_argument('-test_size', dest='test_size', default = 0.2,
+parser.add_argument('-test_size', dest='test_size', default = None,
                     help='Test size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
                     help='Shuffle the dataset')
@@ -183,7 +183,6 @@ for t in range(args.n_tests):
     j = np.random.randint(len(X))       # random batch
     k = np.random.randint(len(X[j]))    # random datapoint
 
-    print(X[j].shape)
     start = time.time()
     outputs = net(X[j], 1)
     end = time.time()
