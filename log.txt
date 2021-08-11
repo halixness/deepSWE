@@ -210,3 +210,7 @@ problemi:
     - le previsioni contengono anche il terreno, inoltre gli output della rete sono negativi!
       forse devo creare un'architettura  (autoencoder) con funzioni relu
     - valutare alternative a ConvLSTM: https://holmdk.github.io/2020/04/02/video_prediction.html
+
+======= 11/08/2021 =======
+
+- Generazione dataset 3x3 grid

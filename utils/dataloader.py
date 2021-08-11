@@ -15,7 +15,7 @@ def unison_shuffled_copies(a, b):
 # ------------------------------------------------------------------------------
 
 class DataLoader():
-    def __init__(self, numpy_file, past_frames, future_frames, root, buffer_size, image_size, batch_size, buffer_memory, dynamicity, downsampling=False, partial=None, clipping_threshold=1e5, test_size=0.2, shuffle=True, device="cpu"):
+    def __init__(self, numpy_file, past_frames, future_frames, root, buffer_size, image_size, batch_size, buffer_memory, dynamicity, downsampling=False, partial=None, clipping_threshold=1e5, test_size=None, shuffle=True, device="cpu"):
         ''' Initiates the dataloading process '''
 
         if root is None and numpy_file is None:
@@ -96,8 +96,18 @@ class DataLoader():
         print("[!] Preprocessing completed!")
 
     def get_dataset(self):
-        ''' Get train dataset '''
+        ''' Get complete dataset '''
         return self.X, self.Y
+
+    def save_dataset(self, filename):
+        ''' Store the dataset -> npy '''
+        #try:
+        np.save(filename, (self.X, self.Y), dtype=object)
+        print("[~] Dataset stored to -> {}".format(filename))
+        #    return True
+        #except:
+        #    print("[!] Error while saving the npy file")
+        #    return False
 
     def get_train(self):
         ''' Get train dataset '''

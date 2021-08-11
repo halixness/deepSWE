@@ -55,6 +55,8 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
+parser.add_argument('-save', dest="save_dataset", default = False, type=str2bool,
+                    help='Save the dataset loaded from disk to a npy file')
 parser.add_argument('-network', dest="network", default = "conv",
                     help='Network type: conv/nfnet/(...)')
 parser.add_argument('-test_size', dest='test_size', default = 0.2,
@@ -157,6 +159,10 @@ print("\n[!] It's training time!")
 
 X_train, y_train = dataset.get_train()
 X_test, y_test = dataset.get_test()
+
+# Stores the dataset on disk for faster loading
+if args.save_dataset is not None:
+    dataset.save_dataset("runs/" + foldername + "/dataset.npy")
 
 epochs = args.epochs
 
