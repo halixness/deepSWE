@@ -97,6 +97,9 @@ parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
+parser.add_argument('-out_channels', dest='out_channels', default=1, type=int,
+                    help='number of input channels')
+
 
 args = parser.parse_args()
 
@@ -140,9 +143,9 @@ dataset = DataLoader(
 
 # ---- Model
 if args.network == "conv":
-    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device) # False: many to one
+    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
 elif args.network == "nfnet":
-    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device)
+    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device)
 else:
     raise Exception("Unkown network type given.")
 
@@ -180,7 +183,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         # ---- Batch Loss
         # central square only 
-        loss = criterion(outputs[:, 0, 0, 256:512, 256:512], y_train[i, :, 0, 0, 256:512, 256:512])
+        loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
 
         loss.backward()
         optimizer.step()
@@ -216,11 +219,17 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         for i, frame in enumerate(X_test[k, x]):
             axs[i].title.set_text('t={}'.format(i))
             axs[i].matshow(frame[0].cpu().detach().numpy())
+            rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+            axs[i].add_patch(rect)
 
         axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
+        rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+        axs[i+1].add_patch(rect)
         axs[i+1].title.set_text('Predicted')
 
         axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
+        rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+        axs[i+2].add_patch(rect)
         axs[i+2].title.set_text('Ground Truth')
 
         plt.show()
