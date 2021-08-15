@@ -214,3 +214,21 @@ problemi:
 ======= 11/08/2021 =======
 
 - Generazione dataset 3x3 grid
+- Training su grid 3x3 con valutazione dei risultati, inizio training su porzione di dataset estesa
+- Inizio test con modalitá autoregressiva, da testare anche LSTM many-to-many
+
+======= 15/08/2021 =======
+
+- Impostazione rete neurale per il dataset 3x3 grid
+- Verifica ultime statistiche training
+
+======= TODO =======
+Done    Priority    Task
+[ ]     1           Aumenta i frame passati, sperimenta autoregressiva e 1tomany
+[ ]     2           Stampare le previsioni dal file tests + invia risultati
+[ ]     2           Pensa alla modalitá on the fly di nuovo
+[ ]     3           Migliora la metrica
+[ ]     4           Scrivere la documentazione su github
+[ ]     5           Refactoring PyTorch Lightning, multiple gpus + tpus
+
+

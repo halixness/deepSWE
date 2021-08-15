@@ -4,7 +4,7 @@ import torch.nn as nn
 from models.ae.ConvLSTMCell import ConvLSTMCell
 
 class EncoderDecoderConvLSTM(nn.Module):
-    def __init__(self, nf, in_chan):
+    def __init__(self, nf, in_chan, out_chan=1):
         super(EncoderDecoderConvLSTM, self).__init__()
 
         """ ARCHITECTURE 
@@ -36,7 +36,7 @@ class EncoderDecoderConvLSTM(nn.Module):
                                                bias=True)
 
         self.decoder_CNN = nn.Conv3d(in_channels=nf,
-                                     out_channels=1,
+                                     out_channels=out_chan,
                                      kernel_size=(1, 3, 3),
                                      padding=(0, 1, 1))
 
