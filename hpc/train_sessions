@@ -1,3 +1,10 @@
-job_id		epochs		dataset portion
-1505919		200		70%
-1505920		100		70%
+job_id		epochs		dataset portion		result		img_size
+1506091		100		0.25			OOM		256
+1506096		100		0.5			OOM		256
+1506097		100		0.7			OOM		256
+1506159		100		0.1			SUCCESS		768
+1506160		100		0.2			SUCCESS		768
+1506162		100		0.5			CUDA OOM	768
+1506234		100		0.3			running		768
+1506235		500		0.3			running		768
+1506247		200		0.2			running

@@ -6,7 +6,7 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
-#SBATCH --mem=256G
+#SBATCH --mem=100G
 #SBATCH --time=23:00:00
 
 # al piu' 128gb di ram per gpu in media
@@ -18,5 +18,5 @@ source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate swe-cv-pytorch
 
 cd ..
-python -u train.py -r ../datasets/arda/output_2021_08_03_1317/mini_256/ -epochs 100 -lr 0.0001 -p 4 -s 0.5 -save True
+python -u train_grid.py -r ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -epochs 500 -lr 0.0001 -p 4 -s 0.2 -i 768
 
