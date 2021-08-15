@@ -1,5 +1,5 @@
 <img src="logo.png" width="512"/>
-A framework for Shallow Water Emulations with Deep Neural Networks.
+A framework to learn Shallow Water Equations with Deep Neural Networks.
 
 ## Introduction
 
