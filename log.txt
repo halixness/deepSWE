@@ -221,6 +221,12 @@ problemi:
 
 - Impostazione rete neurale per il dataset 3x3 grid
 - Verifica ultime statistiche training
+- Iniziato il refactoring pytorch lightning: dataset + training
+- Completato allenamento 3x3 grid:
+    - previsioni meno blurry e piú sensate
+    - da generare plot a risoluzione immagine nativa
+- Sperimentato con VideoGPT e compreso come si puó integrare al nuovo dataset
+  dopo il refactoring con pytorch lightning. Possibile aggiunta alla tesi!
 
 ======= TODO =======
 Done    Priority    Task
