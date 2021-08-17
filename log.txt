@@ -228,6 +228,20 @@ problemi:
 - Sperimentato con VideoGPT e compreso come si puó integrare al nuovo dataset
   dopo il refactoring con pytorch lightning. Possibile aggiunta alla tesi!
 
+======= 17/08/2021 =======
+
+- Introdotta modalitá on the fly -> da implementare su lightning
+  poi fare training su TUTTO il dataset
+- Generazione file npy -> non va con dataset sopra i 4GiB
+- Risolto forse il problema di loading nel training con PyTorch Lightning
+
+======= TASKS =======
+
+Mode                FullDataset        PartialDataset
+1to1                                    x
+Autoregressive                          
+1tomany
+
 ======= TODO =======
 Done    Priority    Task
 [ ]     1           Aumenta i frame passati, sperimenta autoregressiva e 1tomany
