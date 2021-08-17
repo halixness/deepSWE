@@ -115,6 +115,9 @@ class SWEDataset(Dataset):
 
     def __getitem__(self, idx):
         return (self.X[idx], self.Y[idx])
+
+    def to_npy(self, filename):
+        th.save(th.Tensor([self.X, self.Y]), filename)
            
 
 # ------------------------------------------------------------------------------
@@ -255,7 +258,7 @@ class DataGenerator():
         print("[x] {} areas found".format(len(self.dataset_partitions)))
 
         # For each area
-        for area_index, area in enumerate(self.dataset_partitions):
+        for area_index, area in tqdm(enumerate(self.dataset_partitions)):
             # For each sequence
             loaded = 0
             for i, sequence in enumerate(area[1]):
@@ -285,6 +288,8 @@ class DataGenerator():
                 framestart = int(sequence.replace("id-", ""))
 
                 # Starts from the right frame
+                print("sequence {} ".format(i), end='')
+                
                 for k in range(framestart, framestart + self.past_frames + self.future_frames):
 
                     # id area -> id frame
@@ -389,8 +394,10 @@ class DataGenerator():
 
                     if Y is None: Y = np.expand_dims(y,0)
                     else: Y = np.concatenate((Y, np.expand_dims(y,0)))
-
-                    print(". ", end = '')
+                
+                    print(" - valid ")
+                else:
+                    print(" - discarded ")
 
             print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
 

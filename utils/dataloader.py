@@ -300,6 +300,8 @@ class DataGenerator():
                 framestart = int(sequence.replace("id-", ""))
 
                 # Starts from the right frame
+                print("sequence {} ".format(i), end='')
+                
                 for k in range(framestart, framestart + self.past_frames + self.future_frames):
 
                     # id area -> id frame
@@ -405,7 +407,9 @@ class DataGenerator():
                     if Y is None: Y = np.expand_dims(y,0)
                     else: Y = np.concatenate((Y, np.expand_dims(y,0)))
 
-                    print(". ", end = '')
+                    print(" - valid ")
+                else:
+                    print(" - discarded ")
 
             print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
 
