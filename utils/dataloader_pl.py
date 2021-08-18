@@ -60,61 +60,78 @@ class SWEDataset(Dataset):
         if root is None and numpy_file is None:
             raise Exception("Please specify either a root path or a numpy file: -r /path -npy /dataset.py")
 
-        # Loads from disk
-        if numpy_file is None:
-            print("[~] Loading from disk...")
+        self.partitions = DataPartitions(
+            past_frames=past_frames,
+            future_frames=future_frames,
+            root=root,
+            partial=partial
+        )
 
-            self.partitions = DataPartitions(
-                past_frames=past_frames,
-                future_frames=future_frames,
-                root=root,
-                partial=partial
-            )
+        self.dataset = DataGenerator(
+            root=root,
+            dataset_partitions=self.partitions.get_partitions(),
+            past_frames=self.partitions.past_frames,
+            future_frames=self.partitions.future_frames,
+            input_dim=(self.partitions.past_frames, image_size, image_size, 4),
+            output_dim=(self.partitions.future_frames, image_size, image_size, 3),
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+            buffer_memory=buffer_memory,
+            downsampling=False,
+            dynamicity=dynamicity
+        )
 
-            self.dataset = DataGenerator(
-                root=root,
-                dataset_partitions=self.partitions.get_partitions(),
-                past_frames=self.partitions.past_frames,
-                future_frames=self.partitions.future_frames,
-                input_dim=(self.partitions.past_frames, image_size, image_size, 4),
-                output_dim=(self.partitions.future_frames, image_size, image_size, 3),
-                batch_size=batch_size,
-                buffer_size=buffer_size,
-                buffer_memory=buffer_memory,
-                downsampling=False,
-                dynamicity=dynamicity
-            )
-            self.X, self.Y, self.extra_batch = self.dataset.get_data()
-
-            self.X[self.X > clipping_threshold] = 0
-            self.Y[self.Y > clipping_threshold] = 0
-
-        # Loads from stored file
-        else:
-            print("[~] Loading from npy file...")
-
-            self.X, self.Y, self.extra_batch = np.load(numpy_file, allow_pickle=True)
-            print("[!] Successfully loaded dataset from {} \nX.shape: {}\nY.shape: {}\n".format(
-                numpy_file, self.X.shape, self.Y.shape
-            ))
-    
-        self.X = th.Tensor(self.X).to(device)
-        self.Y = th.Tensor(self.Y).to(device)
-
-        # Channel-first conversion
-        # b, s, t, h, w, c -> b, s, t, c, h, w
-        self.X = self.X.permute(0, 1, 2, 5, 3, 4)
-        self.Y = self.Y.permute(0, 1, 2, 5, 3, 4)
-
-        print("[!] Preprocessing completed!")
+        self.valid_datapoints = dict()
 
     # ------------------------------
 
+    def pushValid(self, i, j):
+        ''' Marks sequence j of area i as valid '''
+        if i not in self.valid_datapoints:
+            self.valid_datapoints[i] = [j]
+        else:
+            if j not in self.valid_datapoints[i]:
+                self.valid_datapoints[i].append(j)
+
+    def isValid(self, i, j):
+        ''' True if area i and sequence j is marked as valid already '''
+        return i in self.valid_datapoints and j in self.valid_datapoints[i]
+            
     def __len__(self):
-        return self.X.shape[0]
+        size = 0
+        for part in self.partitions.get_partitions(): # sum of num.seqs per area
+            size += len(part[1])
+        return size
 
     def __getitem__(self, idx):
-        return (self.X[idx], self.Y[idx])
+
+        # De-linearization
+        x = 0
+        X = None
+        Y = None
+        for i, area in enumerate(self.partitions.get_partitions()):
+            for j, seq in enumerate(area[1]):
+                x += 1
+                if x == idx: break
+            if x == idx: break
+
+        # Picks the datapoint on the fly
+        X, Y = self.dataset.get_datapoint(i, j, check=(not self.isValid(i, j)))
+
+        if X is not None: 
+            self.pushValid(i, j)
+
+            x = th.Tensor(X)
+            y = th.Tensor(Y)
+
+            # Channel-first conversion
+            # b, s, t, h, w, c -> b, s, t, c, h, w
+            x = x.permute(0, 1, 4, 2, 3)
+            y = y.permute(0, 1, 4, 2, 3)
+            
+            return (x, y)
+        else:
+            return None
 
     def to_npy(self, filename):
         th.save(th.Tensor([self.X, self.Y]), filename)
@@ -333,7 +350,6 @@ class DataGenerator():
                     frame, vvx, vvy = matrices
 
                     # ---
-                    velocity = np.sqrt(vvx ** 2 + vvy ** 2)
 
                     if deps is None:
                         deps = np.array([frame])
@@ -406,6 +422,168 @@ class DataGenerator():
             self.buffer_hit_ratio = self.buffer_hit_ratio * 0.5 + 0.5 * (hits / accesses)
 
         return X, Y
+
+    
+    def get_datapoint(self, area_index, sequence_index, check=True):  
+        '''
+            Generates a single datapoint on the fly (cached)
+            Inputs:
+                - index of the area
+                - index of the sequence
+                - flag to check sequence validity
+            Outputs:
+                - case 1: valid sequence        ->  (X, Y)
+                - case 2: non-valid sequence    ->  None
+        '''
+
+        # Initialization
+        X = None
+        Y = None
+
+        area = self.dataset_partitions[area_index]
+        sequence = self.dataset_partitions[area_index][1][sequence_index]
+
+        # --- BTM
+        btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
+        if len(btm_filenames) == 0:
+            raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
+        btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+
+        # --- Preprocessing
+        if self.downsampling:
+            btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
+            btm = cv.pyrDown(btm)
+
+        # riduzione valori il sottraendo minimo
+        min_btm = np.min(btm)
+        btm = btm - min_btm
+
+        btm.resize(btm.shape[0], btm.shape[1], 1)
+        btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
+
+        deps = None
+        vvx_s = None
+        vvy_s = None
+
+        framestart = int(sequence.replace("id-", ""))
+
+        # Starts from the right frame
+        for k in range(framestart, framestart + self.past_frames + self.future_frames):
+
+            # id area -> id frame
+            gid = "{}-{}-{}".format(area_index, sequence, k)
+
+            # Parameters
+            extensions = ["DEP", "VVX", "VVY"]
+            matrices = []
+
+            # Gets datapoint filename
+            dep_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if
+                            x.endswith(".DEP")]
+
+            if len(dep_filenames) == 0:
+                raise Exception("No DEP maps found for the area {}".format(self.dataset_partitions[area_index][0]))
+
+            # asserting that all maps are named with the same prefix
+            dep_filename = dep_filenames[0].split(".")[0][:-4]
+
+            # 1 frame -> 3 matrices (3 extensions)
+            for i, ext in enumerate(extensions):
+                
+                global_id = "{}-{}".format(i, gid)  # indice linearizzato globale
+
+                cache = self.buffer_lookup(
+                    global_id
+                )
+                if cache is False:
+                    frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                    # --- On-spot Gaussian Blurring
+                    if self.downsampling:
+                        frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
+                        frame = cv.pyrDown(frame)
+                    # ----
+                    self.buffer_push(global_id, frame)
+                else:
+                    frame = cache
+
+                matrices.append(frame)
+
+            frame, vvx, vvy = matrices
+
+            # ---
+
+            if deps is None:
+                deps = np.array([frame])
+            else:
+                deps = np.concatenate((deps, np.array([frame])))
+
+            if vvx_s is None:
+                vvx_s = np.array([vvx])
+            else:
+                vvx_s = np.concatenate((vvx_s, np.array([vvx])))
+
+            if vvy_s is None:
+                vvy_s = np.array([vvy])
+            else:
+                vvy_s = np.concatenate((vvy_s, np.array([vvy])))
+
+        # ---------
+
+        deps[deps > 10e5] = 0
+        vvx_s[vvx_s > 10e5] = 0
+        vvy_s[vvy_s > 10e5] = 0
+        btm_x[btm_x > 10e5] = 0
+
+        # --- X
+        x_dep = deps[:self.past_frames]
+        x_dep.resize((x_dep.shape[0], x_dep.shape[1], x_dep.shape[2], 1))
+
+        x_vx = vvx_s[:self.past_frames]
+        x_vx.resize((x_vx.shape[0], x_vx.shape[1], x_vx.shape[2], 1))
+
+        x_vy = vvy_s[:self.past_frames]
+        x_vy.resize((x_vy.shape[0], x_vy.shape[1], x_vy.shape[2], 1))
+
+        x = np.concatenate((x_dep, x_vx, x_vy, btm_x), axis=3)
+
+        # --- Y
+        y_dep = deps[self.past_frames:]
+        y_dep.resize((y_dep.shape[0], y_dep.shape[1], y_dep.shape[2], 1))
+
+        y_vx = vvx_s[self.past_frames:]
+        y_vx.resize((y_vx.shape[0], y_vx.shape[1], y_vx.shape[2], 1))
+
+        y_vy = vvy_s[self.past_frames:]
+        y_vy.resize((y_vy.shape[0], y_vy.shape[1], y_vy.shape[2], 1))
+
+        y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
+
+        # filtering
+        if check:
+            sequence = np.concatenate((x[:,:,:,:3], y), axis=0)
+            score, valid = self.preprocessing.eval_datapoint(sequence, self.dynamicity)
+
+            if valid:
+
+                if X is None: X = np.expand_dims(x,0)
+                else: X = np.concatenate((X, np.expand_dims(x,0)))
+
+                if Y is None: Y = np.expand_dims(y,0)
+                else: Y = np.concatenate((Y, np.expand_dims(y,0)))
+
+                return X, Y
+            else:
+                return (None, None)
+
+        else:
+            if X is None: X = np.expand_dims(x,0)
+            else: X = np.concatenate((X, np.expand_dims(x,0)))
+
+            if Y is None: Y = np.expand_dims(y,0)
+            else: Y = np.concatenate((Y, np.expand_dims(y,0)))
+
+            return X, Y
+
 
     # ------------------------------------
 

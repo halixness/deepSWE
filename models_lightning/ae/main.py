@@ -45,21 +45,29 @@ class deepSWE(pl.LightningModule):
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
-        x, y = train_batch
-        
-        logits = self.forward(x, 1)
 
-        loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
-        self.log('train_loss', loss)
-        return loss
+        if train_batch is not None:
+
+            x, y = train_batch
+            
+            logits = self.forward(x, 1)
+
+            loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
+            self.log('train_loss', loss)
+
+            return loss
+        else:
+            return None
 
     def validation_step(self, val_batch, batch_idx):
-        x, y = val_batch
 
-        logits = self.forward(x, 1)
+        if val_batch is not None:
+            x, y = val_batch
 
-        loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
-        self.log('val_loss', loss)
+            logits = self.forward(x, 1)
+
+            loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
+            self.log('val_loss', loss)
 
 
     # ------------------------------------------------

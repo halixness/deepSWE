@@ -234,6 +234,7 @@ problemi:
   poi fare training su TUTTO il dataset
 - Generazione file npy -> non va con dataset sopra i 4GiB
 - Risolto forse il problema di loading nel training con PyTorch Lightning
+- Forse parallelizzare la lettura di sequenze!
 
 ======= TASKS =======
 
