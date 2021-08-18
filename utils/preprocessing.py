@@ -43,20 +43,18 @@ class Preprocessing():
         return max_diff, max_diff >= threshold
 
     
-    def eval_datapoint(self, seq, threshold):
+    def eval_datapoint(self, seq, threshold=1e-1):
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
             threshold = [0,1]
         '''
-        
+
+        # TODO: sperimentare la soglia giusta per questa metrica (cheaper)
+
         # compares the % difference between last and first frame
         end_seq_mean = np.max(np.abs(seq[seq.shape[0]-1,:,:,0]))
 
         if end_seq_mean > 0:
             score = np.max(np.abs(seq[seq.shape[0]-1,:,:,0] - seq[0,:,:,0]))/end_seq_mean
-            
-            print(score)
-            raise KeyboardInterrupt
-            
             return score, end_seq_mean >= threshold 
         else:
             return end_seq_mean, False

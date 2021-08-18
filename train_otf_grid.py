@@ -136,7 +136,7 @@ dataset = DataGenerator(
     buffer_size=1e3,
     buffer_memory=100,
     downsampling=False,
-    dynamicity = 1e-2
+    dynamicity = 1e-1
 )
 
 # ---- Model
@@ -161,6 +161,8 @@ print("\n[!] It's training time!")
 epochs = args.epochs
 
 parts = partitions.get_partitions()
+x = 0
+loss = 0
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
@@ -169,12 +171,13 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         # If it's valid marked
         if area[2] != None:
             
-            for j, sequence in enumerate(area[1]):
+            for j, sequence in enumerate(area[1][-50:]):
 
                 # TODO: accumulate datapoints to batch_size and then forward pass
-                datapoint = dataset.get_datapoint(i, j)
+                datapoint = dataset.get_datapoint(i, sequence)
 
                 if datapoint != None:
+                    x += 1
                     X, Y = datapoint
 
                     # b, s, t, h, w, c -> b, s, t, c, h, w
@@ -190,20 +193,25 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
                     # ---- Batch Loss
                     xstart=256
-                    xend=256
+                    xend=xstart+256
                     ystart=256
-                    yend=256
+                    yend=ystart+256
                     
-                    loss = criterion(outputs[:,:,0,ystart:yend,xstart:xend], Y[:,0,:,ystart:yend,xstart:xend])
+                    loss += criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
 
-                    loss.backward()
-                    optimizer.step()
+                    # mini-batch
+                    if x % args.batch_size == 0:
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
+                        print("\nloss: {}".format(loss.item()))
+                        # print statistics
+                        losses.append(loss.item())
+                        loss = 0
+                        x = 0
+                    else:
+                        print(". ", end="")
 
-                    # print statistics
-                    losses.append(loss.item())
-
-                    print(loss.item())
-                
                 else:
                     print("skipping invalid datapoint...")
 

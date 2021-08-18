@@ -437,7 +437,7 @@ class DataGenerator():
         Y = None
 
         area = self.dataset_partitions[area_index]
-        sequence = self.dataset_partitions[area_index][1][sequence_index]
+        sequence = sequence_index
 
         # --- BTM
         btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
@@ -493,6 +493,7 @@ class DataGenerator():
                 )
                 if cache is False:
                     frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+
                     # --- On-spot Gaussian Blurring
                     if self.downsampling:
                         frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
