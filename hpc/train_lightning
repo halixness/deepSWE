@@ -1,22 +1,21 @@
 #!/bin/bash
-#SBATCH --job-name=SWE_dataset
+#SBATCH --job-name=SWE_deepTraining
 #SBATCH --output=%x.o%j
 #SBATCH --error=%x.e%j
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --partition=gpu
 #SBATCH --mem=150G
 #SBATCH --time=23:00:00
 
 # al piu' 128gb di ram per gpu in media
 # con il comando 'seff' controllo efficienza memoria
+# --gres=gpu:1
 
 module load miniconda3
-source "$CONDA_PREFIX/etc/profile.d/conda.sh" 
-conda activate swe-cv-pytorch
+source "$CONDA_PREFIX/etc/profile.d/conda.sh"
+conda activate swe-cv-lightning
 
 cd ..
-python -u generate_dataset.py -r ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -o ../datasets/arda_3m_768_complete.npy -s 0.2 -i 768
-
-
+python -u train_pl.py -root ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -partial 0.1
