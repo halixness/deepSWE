@@ -42,5 +42,5 @@ dataset = SWEDataModule(
 model = deepSWE(nf=4, in_chan=4)
 logger = TensorBoardLogger("tb_logs", name="deepSWE")
 
-trainer = pl.Trainer(logger=logger)
+trainer = pl.Trainer(logger=logger, log_every_n_steps=10)
 trainer.fit(model, dataset)

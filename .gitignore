@@ -4,3 +4,5 @@
 **/SWE_*
 __pycache__/
 *.py[cod]
+lightning_logs/
+tb_logs/

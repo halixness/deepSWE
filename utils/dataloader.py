@@ -506,7 +506,6 @@ class DataGenerator():
             frame, vvx, vvy = matrices
 
             # ---
-            velocity = np.sqrt(vvx ** 2 + vvy ** 2)
 
             if deps is None:
                 deps = np.array([frame])
