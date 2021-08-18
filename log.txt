@@ -239,15 +239,72 @@ problemi:
 ======= 18/08/2021 =======
 
 - Generazione risultati da training (4 frames, 768, porzione del dataset 0.2)
-- Testata la modalitá on the fly, problema:
-    - per creae mini-batch dataloader, la fz. __get_item__ deve generare valori non None
+- Usando il pre-training serve molta ram in anticipo, peso del dataset:
+    Dataset Arda, DT_OUTPUT = 3 minuti
+        5,0G	mini-1715-2483-3815-4583
+        5,0G	mini-1750-2518-3780-4548
+        5,0G	mini-1750-2518-3815-4583
+        5,0G	mini-1785-2553-3780-4548
+        5,0G	mini-1785-2553-3815-4583
+        5,0G	mini-1820-2588-3780-4548
+        5,0G	mini-1820-2588-3815-4583
+        5,0G	mini-1855-2623-3780-4548
+        5,0G	mini-1855-2623-3815-4583
+        5,0G	mini-1890-2658-3780-4548
+        5,0G	mini-1890-2658-3815-4583
+        5,0G	mini-1925-2693-3780-4548
+        5,0G	mini-1925-2693-3815-4583
+        5,0G	mini-1960-2728-3780-4548
+        5,0G	mini-1960-2728-3815-4583
+        5,0G	mini-1995-2763-3780-4548
+        5,0G	mini-1995-2763-3815-4583
+        5,0G	mini-2030-2798-3780-4548
+        5,0G	mini-2030-2798-3815-4583
+        5,0G	mini-2065-2833-3780-4548
+        5,0G	mini-2065-2833-3815-4583
+        5,0G	mini-2100-2868-3815-4583
+
+    Considerando i duplicati per generare sequenze di frames, la quantitá di ram richiesta é elevata.
+    Quindi son tornato alla tecnica training "on the fly". 
+
+- Ho effettuato il refactoring del codice, esistono 2 codebase:
+    - Versione "legacy": tutte le classi sviluppate fino ad ora, PyTorch puro. Posso applicare sia il pre-loading
+    che la tecnica "on the fly" (1 datapoint caricato da disco alla volta) e fare training in modalitá sia mini-batch (batch size = 4)
+    che stochastic gradient descent (batch size = 1)
+    - PyTorch Lightning (https://www.pytorchlightning.ai/): ho effettuato il porting a questa libreria per sfruttare le classi del modello (trainer, optimizer,
+    data loader) della libreria, con tutte le best practices correnti. Aggiunte: monitoraggio del traning in real-time con tensorboard,
+    supporto multi-gpu e multi-tpu automatico, supporto di piú piattaforme di cloud computing, supporto tecniche traning avanzate 
+    (https://pytorch-lightning.readthedocs.io/en/latest/advanced/training_tricks.html)
+
+- Valutazione dei risultati:
+    - Modalitá Legacy: son riuscito a effettuare il traning soltanto con il 20% del dataset, tutto caricato in ram.
+    a breve avvieró il traning con il caricamento "on the fly". Il training é stato effettuato con il sistema a griglie
+    3x3, quindi:
+        - fornisco al modello immagini 768x768 (cioé 3x3 griglie da 256) con 4 canali (btm, vvx, vvy, dep)
+        - il modello restituisce un'immagine da 768x768 con 3 canali (dep, vvx, vvy)
+        - calcolo la loss e i gradienti SOLO sul riquadro centrale 256x256
+    I risultati del traning svolto sono contenuti nel file allegato:
+        - vengono scelti 10 datapoint casuali dal test set 
+        - per ciascuno sono salvati i plot dei singoli timesteps a risoluzione nativa (768x768, quindi 3x3 griglie da 256), il centro non é evidenziato.
+        - nel file "sequence" c'é il riepilogo di tutti i plot con la matrice centrale evidenziata
+    
+    - PyTorch Lightning: per ora posso solo effetuare il training in modalitá SGD (batch size = 1) se uso l'on the fly.
+    
+
 
 ======= TASKS =======
 
 Mode                FullDataset        PartialDataset
-1to1                                    x
+-------------------------------------------------------
+1to1                                    X
 Autoregressive                          
 1tomany
+
+Mode                SGD                 mini-batch
+-------------------------------------------------------
+PyTorch             X                   X
+PyTorch OTF         X
+Lightning OTF       X
 
 ======= TODO =======
 Done    Priority    Task

@@ -21,10 +21,10 @@ class Preprocessing():
 
         return pytorch_ssim.ssim(frame1, frame2)
 
-    ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
-        threshold = [0,1]
-    '''
-    def eval_datapoint(self, seq, threshold):
+    def eval_datapoint_ssim(self, seq, threshold):
+        ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
+            threshold = [0,1]
+        '''
         # shape: frames, h, w, channels
         max_diff = 0.0
 
@@ -41,3 +41,23 @@ class Preprocessing():
             max_diff = max(max_diff, 1-similarity)
 
         return max_diff, max_diff >= threshold
+
+    
+    def eval_datapoint(self, seq, threshold):
+        ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
+            threshold = [0,1]
+        '''
+        
+        # compares the % difference between last and first frame
+        end_seq_mean = np.max(np.abs(seq[seq.shape[0]-1,:,:,0]))
+
+        if end_seq_mean > 0:
+            score = np.max(np.abs(seq[seq.shape[0]-1,:,:,0] - seq[0,:,:,0]))/end_seq_mean
+            
+            print(score)
+            raise KeyboardInterrupt
+            
+            return score, end_seq_mean >= threshold 
+        else:
+            return end_seq_mean, False
+

@@ -36,7 +36,8 @@ dataset = SWEDataModule(
     val_size=args.val_size,
     past_frames=args.past_frames,
     future_frames=args.future_frames,
-    partial=args.partial
+    partial=args.partial,
+    filtering=False
 )
 
 model = deepSWE(nf=4, in_chan=4, out_chan=3)

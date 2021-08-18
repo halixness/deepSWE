@@ -429,6 +429,7 @@ class DataGenerator():
             Outputs:
                 - case 1: valid sequence        ->  (X, Y)
                 - case 2: non-valid sequence    ->  None
+                
         '''
 
         # Initialization
@@ -524,10 +525,10 @@ class DataGenerator():
 
         # ---------
 
-        deps[deps > 10e5] = 0
-        vvx_s[vvx_s > 10e5] = 0
-        vvy_s[vvy_s > 10e5] = 0
-        btm_x[btm_x > 10e5] = 0
+        deps[deps > 10e10] = 0
+        vvx_s[vvx_s > 10e10] = 0
+        vvy_s[vvy_s > 10e10] = 0
+        btm_x[btm_x > 10e10] = 0
 
         # --- X
         x_dep = deps[:self.past_frames]
