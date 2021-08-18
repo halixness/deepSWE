@@ -1,12 +1,13 @@
 # %%
 import os
 from datetime import datetime
-from utils.dataloader import DataLoader,DataPartitions, DataGenerator
+from utils.dataloader_pl import SWEDataset
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
+import matplotlib.patches as patches
 
 import torch as th
 import torch.optim as optim
@@ -72,19 +73,21 @@ parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
+parser.add_argument('-out_channels', dest='out_channels', default=3, type=int,
+                    help='number of input channels')                    
 parser.add_argument('-tests', dest='n_tests', default=10, type=int,
                     help='number of tests to perform')
 parser.add_argument('-weights', dest='weights_path',
                     help='model weights for testing')
 parser.add_argument('-dset', dest='dataset_path',
                     help='path to a npy stored dataset')
-parser.add_argument('-r', dest='root',
+parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
-parser.add_argument('-p', dest='past_frames', default=1, type=int,
+parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
 parser.add_argument('-f', dest='future_frames', default=1, type=int, 
                     help='number of future frames')       
-parser.add_argument('-s', dest='partial', default=None, type=float,
+parser.add_argument('-partial', dest='partial', default=None, type=float,
                     help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
 parser.add_argument('-i', dest='image_size', default=256, type=int,
                     help='image size (width = height)')
@@ -130,35 +133,18 @@ device = th.device(dev)
 
 plotsize = 15
 
-dataset = DataLoader(
-    root=args.root, 
-    numpy_file=args.numpy_file, 
-    past_frames=args.past_frames, 
-    future_frames=args.future_frames, 
-    image_size=args.image_size, 
-    batch_size=args.batch_size, 
-    buffer_size=args.buffer_size, 
-    buffer_memory=args.buffer_memory, 
-    dynamicity=args.dynamicity, 
-    partial=args.partial, 
-    test_size=args.test_size, 
-    clipping_threshold=1e5, 
-    shuffle=args.shuffle,
-    device=device
-)
-
 # -------------- Model
 if args.network == "conv":
-    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device) # False: many to one
+    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
 elif args.network == "nfnet":
-    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device)
+    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device)
 else:
     raise Exception("Unkown network type given.")
 
 # Loading model weights from previous training
 print("[x] Loading model weights")
 net.load_state_dict(
-    th.load(args.weights_path)
+    th.load(args.weights_path, map_location=th.device('cpu'))
 )
 net.eval() # evaluation mode
 
@@ -176,59 +162,78 @@ ssim_score = 0
 l1_score = 0
 l2_score = 0
 
-X, Y = dataset.get_dataset()
+dataset = SWEDataset(
+    root=args.root,  
+    past_frames=args.past_frames, 
+    future_frames=args.future_frames, 
+    partial=args.partial
+)
 
 for t in range(args.n_tests):
 
-    j = np.random.randint(len(X))       # random batch
-    k = np.random.randint(len(X[j]))    # random datapoint
+    print("-- Test {} running...".format(t), end="")
+
+    i = np.random.randint(len(dataset))       # random batch
+    datapoint = dataset[i]
+
+    while datapoint is None:
+        i = np.random.randint(len(dataset))       # random batch
+        datapoint = dataset[i]
+
+    print("\t data loaded!")
+    
+    # b, t, c, h, w 
+    x, y = datapoint
 
     start = time.time()
-    outputs = net(X[j], 1)
+    # 1, t, c, h, w 
+    outputs = net(x, 1)
     end = time.time()
     inference_times.append(end - start)
 
-    img1 = Variable(outputs[k, 0, :, :].unsqueeze(0), requires_grad=False)
-    img2 = Variable(Y[j, k, 0, 0].unsqueeze(0).unsqueeze(0), requires_grad=True)
+    # 1, c, h, w
+    img1 = Variable(outputs[0, :, 0, :, :].unsqueeze(0), requires_grad=False)
+    img2 = Variable(y[0, 0, :, :, :].unsqueeze(0), requires_grad=True)
 
-    ssim_score += ssim(img1, img2)
-    l1_score += l1(img1, img2)
-    l2_score += l2(img1, img2)
+    curr_ssim = ssim(img1, img2)
+    curr_l1 = l1(img1, img2)
+    curr_l2 = l2(img1, img2)
+
+    ssim_score += curr_ssim
+    l1_score += curr_l1
+    l2_score += curr_l2
 
     # ------------- Plotting
     test_dir = "runs/" + foldername + "/test_{}".format(t)
     os.mkdir(test_dir)
 
-    fig, axs = plt.subplots(1, X.shape[2] + 2, figsize=(plotsize, plotsize))
+    fig, axs = plt.subplots(1, x.shape[1] + 2, figsize=(plotsize, plotsize))
 
     for ax in axs:
         ax.set_yticklabels([])
         ax.set_xticklabels([])
 
-    # random datapoint from batch
-    x = np.random.randint(X[j].shape[0])
-
     # Past frames
-    for i, frame in enumerate(X[j, k]):
+    for i, frame in enumerate(x[0]):
         axs[i].title.set_text('t={}'.format(i))
         axs[i].matshow(frame[0].cpu().detach().numpy())
         rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
         axs[i].add_patch(rect)
 
     # Prediction
-    axs[i + 1].matshow(outputs[k][0][0].cpu().detach().numpy())
+    axs[i + 1].matshow(outputs[0,0,0,:,:].cpu().detach().numpy())
     rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
     axs[i + 1].add_patch(rect)
     axs[i + 1].title.set_text('Predicted')
 
     # Ground truth
-    axs[i + 2].matshow(Y[j, k][0][0].cpu().detach().numpy())
+    axs[i + 2].matshow(y[0, 0, 0, :, :].cpu().detach().numpy())
     rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
     axs[i + 2].add_patch(rect)
     axs[i + 2].title.set_text('Ground Truth')
 
     if args.test_flight is None:
-        plt.savefig(test_dir + "/comparison_{}.png".format(t))
+        plt.savefig(test_dir + "/sequence.png")
 
     # Saving single images
     if args.test_flight is None:
@@ -237,16 +242,20 @@ for t in range(args.n_tests):
         plt.cla()
         plt.clf()
 
-        for i, frame in enumerate(X[j, k]):
+        for i, frame in enumerate(x[0]):
             plt.matshow(frame[0].cpu().detach().numpy())
             plt.savefig(test_dir + "/{}.png".format(i))
 
-        plt.matshow(outputs[k][0][0].cpu().detach().numpy())
-        plt.savefig(test_dir + "/{}.png".format(i+1))
+        plt.matshow(outputs[0,0,0,:,:].cpu().detach().numpy())
+        plt.savefig(test_dir + "/predicted.png")
 
-        plt.matshow(Y[j, k][0][0].cpu().detach().numpy())
-        plt.savefig(test_dir + "/{}.png".format(i+2))
-            
+        plt.matshow(y[0, 0, 0, :, :].cpu().detach().numpy())
+        plt.savefig(test_dir + "/ground_truth.png")
+
+    # Write stats
+    text_file = open("runs/" + foldername + "/test_{}/scores.txt".format(t), "w")
+    n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(curr_ssim, curr_l1, curr_l2))
+    text_file.close()
 
     # ----------------
 
@@ -256,9 +265,7 @@ l2_score = l2_score/args.n_tests
 
 stats = "SSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(ssim_score, l1_score, l2_score, np.mean(inference_times))
 
-print()
-
-text_file = open("runs/" + foldername + "/score.txt", "w")
+text_file = open("runs/" + foldername + "/avg_score.txt", "w")
 n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
 text_file.close()
 

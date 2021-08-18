@@ -50,9 +50,9 @@ class deepSWE(pl.LightningModule):
 
             x, y = train_batch
             
-            logits = self.forward(x, 1)
+            logits = self.forward(x[:,0], 1)
 
-            loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
+            loss = self.mse_loss(logits[:, :, 0, :, :] , y[:, 0, 0, :, :])
             self.log('train_loss', loss)
 
             return loss
@@ -64,9 +64,9 @@ class deepSWE(pl.LightningModule):
         if val_batch is not None:
             x, y = val_batch
 
-            logits = self.forward(x, 1)
+            logits = self.forward(x[:,0], 1)
 
-            loss = self.mse_loss(logits[:, 0, 0, :, :] , y[:, 0, 0, :, :])
+            loss = self.mse_loss(logits[:, :, 0, :, :] , y[:, 0, 0, :, :])
             self.log('val_loss', loss)
 
 

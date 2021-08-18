@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 
 class SWEDataModule(pl.LightningDataModule):
 
-    def __init__(self, root, past_frames, future_frames, test_size=0.1, val_size=0.1, partial=None):
+    def __init__(self, root, past_frames, future_frames, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -23,6 +23,7 @@ class SWEDataModule(pl.LightningDataModule):
         self.root = root
         self.past_frames = past_frames
         self.future_frames = future_frames
+        self.filtering = filtering
         
     def prepare_data(self):
 
@@ -30,7 +31,8 @@ class SWEDataModule(pl.LightningDataModule):
             root=self.root,
             past_frames=self.past_frames, 
             future_frames=self.future_frames,
-            partial=self.partial
+            partial=self.partial,
+            filtering = self.filtering
         )
 
         test_len = int(max(1, len(dataset) * self.test_size))
@@ -38,9 +40,9 @@ class SWEDataModule(pl.LightningDataModule):
         train_len = len(dataset) - test_len - val_len
         datasets = random_split(dataset, [train_len, test_len, val_len])
 
-        self.train_loader = DataLoader(datasets[0], batch_size=None, num_workers=0)
-        self.test_loader = DataLoader(datasets[1], batch_size=None, num_workers=0)
-        self.val_loader = DataLoader(datasets[2], batch_size=None, num_workers=0)
+        self.train_loader = DataLoader(datasets[0], batch_size=4, num_workers=0)
+        self.test_loader = DataLoader(datasets[1], batch_size=4, num_workers=0)
+        self.val_loader = DataLoader(datasets[2], batch_size=4, num_workers=0)
 
     def train_dataloader(self):
         return self.train_loader
@@ -54,11 +56,13 @@ class SWEDataModule(pl.LightningDataModule):
 # ------------------------------------------------------------------------------
 
 class SWEDataset(Dataset):
-    def __init__(self, past_frames, future_frames, root, numpy_file=None, image_size=256, batch_size=4, dynamicity=1e-3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None, clipping_threshold=1e5, device="cpu"):
+    def __init__(self, past_frames, future_frames, root, filtering=True, numpy_file=None, image_size=256, batch_size=4, dynamicity=1e-3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None, clipping_threshold=1e5, device="cpu"):
         ''' Initiates the dataloading process '''
 
         if root is None and numpy_file is None:
             raise Exception("Please specify either a root path or a numpy file: -r /path -npy /dataset.py")
+
+        self.filtering = filtering
 
         self.partitions = DataPartitions(
             past_frames=past_frames,
@@ -116,7 +120,10 @@ class SWEDataset(Dataset):
             if x == idx: break
 
         # Picks the datapoint on the fly
-        X, Y = self.dataset.get_datapoint(i, j, check=(not self.isValid(i, j)))
+        if self.filtering: # if enabled
+            X, Y = self.dataset.get_datapoint(i, j, check=(not self.isValid(i, j)))
+        else:
+            X, Y = self.dataset.get_datapoint(i, j, check=False)
 
         if X is not None: 
             self.pushValid(i, j)

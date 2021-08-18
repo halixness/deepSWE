@@ -39,7 +39,7 @@ dataset = SWEDataModule(
     partial=args.partial
 )
 
-model = deepSWE(nf=4, in_chan=4)
+model = deepSWE(nf=4, in_chan=4, out_chan=3)
 logger = TensorBoardLogger("tb_logs", name="deepSWE")
 
 trainer = pl.Trainer(logger=logger, log_every_n_steps=10)

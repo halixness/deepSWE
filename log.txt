@@ -236,6 +236,12 @@ problemi:
 - Risolto forse il problema di loading nel training con PyTorch Lightning
 - Forse parallelizzare la lettura di sequenze!
 
+======= 18/08/2021 =======
+
+- Generazione risultati da training (4 frames, 768, porzione del dataset 0.2)
+- Testata la modalitá on the fly, problema:
+    - per creae mini-batch dataloader, la fz. __get_item__ deve generare valori non None
+
 ======= TASKS =======
 
 Mode                FullDataset        PartialDataset
