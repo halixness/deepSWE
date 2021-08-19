@@ -161,28 +161,48 @@ print("\n[!] It's training time!")
 epochs = args.epochs
 
 parts = partitions.get_partitions()
-x = 0
-loss = 0
 
+
+# Random indexes
+random_accesses = []
+for i, area in enumerate(parts):
+    for j, sequence in enumerate(area[1]):
+        random_accesses.append([i, sequence, None])
+
+np.random.shuffle(random_accesses)
+print("[~] Virtually shuffled the dataset, total sequences: {}".format(len(random_accesses)))
+
+# Initializing batches
+batch_x = np.empty((args.batch_size, args.past_frames, args.image_size, args.image_size, args.in_channels))
+batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
+k = 0
+
+# Training loop
 for epoch in range(epochs):  # loop over the dataset multiple times
-
-    for i, area in enumerate(parts):
+    for i, access in enumerate(random_accesses):
         
-        # If it's valid marked
-        if area[2] != None:
+        # False mark -> invalid datapoint
+        if access[2] != False:
             
-            for j, sequence in enumerate(area[1][-50:]):
+            # True mark -> already checked, valid datapoint
+            if access[2] == True: check = False
+            else: check = True
+    
+            datapoint = dataset.get_datapoint(access[0], access[1], check=check)
+            
+            # If the sequence is invalid -> mark it
+            if datapoint == None:
+                random_accesses[i][2] = False
+                print("=", end="", flush=True)
 
-                # TODO: accumulate datapoints to batch_size and then forward pass
-                datapoint = dataset.get_datapoint(i, sequence)
-
-                if datapoint != None:
-                    x += 1
-                    X, Y = datapoint
+            # Sequence valid
+            else:
+                # Forward pass and empty the batch               
+                if k >= args.batch_size:
 
                     # b, s, t, h, w, c -> b, s, t, c, h, w
-                    X = th.Tensor(X).to(device)
-                    Y = th.Tensor(Y).to(device)
+                    X = th.Tensor(batch_x).to(device)
+                    Y = th.Tensor(batch_y).to(device)
                     X = X.permute(0, 1, 4, 2, 3)
                     Y = Y.permute(0, 1, 4, 2, 3)
 
@@ -197,25 +217,26 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                     ystart=256
                     yend=ystart+256
                     
-                    loss += criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
+                    loss = criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
 
-                    # mini-batch
-                    if x % args.batch_size == 0:
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
-                        print("\nloss: {}".format(loss.item()))
-                        # print statistics
-                        losses.append(loss.item())
-                        loss = 0
-                        x = 0
-                    else:
-                        print(". ", end="")
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    print("-- loss: {}".format(loss.item()), flush=True)
 
-                else:
-                    print("skipping invalid datapoint...")
+                    # print statistics
+                    losses.append(loss.item())
+                    batch_x = np.empty((args.batch_size, args.past_frames, args.image_size, args.image_size, args.in_channels))
+                    batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
+                    k = 0
 
-        print('Finished Training')
+                # Accumulates datapoints in batch 
+                X, Y = datapoint
+                batch_x[k] = X
+                batch_y[k] = Y
+                k += 1
+                
+                print("x", end="", flush=True)
 
 print('[!] Finished Training, storing weights...')
 if args.test_flight is None:

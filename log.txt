@@ -289,7 +289,10 @@ problemi:
         - nel file "sequence" c'é il riepilogo di tutti i plot con la matrice centrale evidenziata
     
     - PyTorch Lightning: per ora posso solo effetuare il training in modalitá SGD (batch size = 1) se uso l'on the fly.
-    
+
+Idee:
+    - quando itera in get_item, l'indice serve solo come iterazione, poi crea il batch, marca le sequenze lette e continua
+    - costruire un batch in otf legacy anziché accumulare i gradienti
 
 
 ======= TASKS =======
