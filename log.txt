@@ -296,9 +296,12 @@ Idee:
 
 ======= 19/08/2021 =======
 
+- metrica filtering sequenza: primo e ultimo frame, differenza in % 
 - Modalitá autoregressive: il modello impara la progressione, ma non dal punto dove
-c'é molta massa (l'acqua cresce, ma un po' ovunque). Quindi forse va moltiplicata la colonna DEP
-per le velocitá?
+c'é molta massa (l'acqua cresce, ma un po' ovunque). 
+    - Quindi forse va moltiplicata la colonna DEP per le velocitá? 
+    - Modalitá 1tomany lstm da provare!
+- Test traning modalitá 1tomany
 
 ======= TASKS =======
 

@@ -405,9 +405,9 @@ class DataGenerator():
                     if Y is None: Y = np.expand_dims(y,0)
                     else: Y = np.concatenate((Y, np.expand_dims(y,0)))
 
-                    print("o ", end='')
+                    print("o ", end='', flush=True)
                 else:
-                    print("x ", end='')
+                    print("x ", end='', flush=True)
 
             print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
 

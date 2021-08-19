@@ -195,7 +195,7 @@ for s in range(args.future_frames):
 
     start = time.time()
     # 1, t, c, h, w 
-    outputs = net(x_in, 1)
+    outputs = net(x_in, 4)
     end = time.time()
     inference_times.append(end - start)
 
