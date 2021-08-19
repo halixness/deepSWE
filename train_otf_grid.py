@@ -162,7 +162,6 @@ epochs = args.epochs
 
 parts = partitions.get_partitions()
 
-
 # Random indexes
 random_accesses = []
 for i, area in enumerate(parts):
@@ -222,7 +221,6 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
-                    print("-- loss: {}".format(loss.item()), flush=True)
 
                     # print statistics
                     losses.append(loss.item())
@@ -230,12 +228,14 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                     batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
                     k = 0
 
+                    print("-- avg.loss: {}".format(np.mean(losses)), flush=True)
+
                 # Accumulates datapoints in batch 
                 X, Y = datapoint
                 batch_x[k] = X
                 batch_y[k] = Y
                 k += 1
-                
+
                 print("x", end="", flush=True)
 
 print('[!] Finished Training, storing weights...')

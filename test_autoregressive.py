@@ -142,7 +142,7 @@ else:
     raise Exception("Unkown network type given.")
 
 # Loading model weights from previous training
-print("[x] Loading model weights")
+print("[~] Loading model weights")
 net.load_state_dict(
     th.load(args.weights_path, map_location=th.device('cpu'))
 )
@@ -169,83 +169,76 @@ dataset = SWEDataset(
     partial=args.partial
 )
 
-for t in range(args.n_tests):
 
-    print("-- Test {} running...".format(t), end="")
+i = np.random.randint(len(dataset))       # random batch
+datapoint = dataset[i]
 
+while datapoint is None:
     i = np.random.randint(len(dataset))       # random batch
     datapoint = dataset[i]
 
-    while datapoint is None:
-        i = np.random.randint(len(dataset))       # random batch
-        datapoint = dataset[i]
+print("[!] Datapoint loaded!")
 
-    print("\t data loaded!")
+# b, t, c, h, w 
+x_in, y = datapoint
+
+# ------------- Plotting
+test_dir = "runs/" + foldername + "/"
+
+for i, frame in enumerate(x_in[0]):
+    plt.matshow(frame[0].cpu().detach().numpy())
+    plt.savefig(test_dir + "/{}.png".format(i))
+    plt.clf()
+
+# predicting
+for s in range(args.future_frames):
+
+    start = time.time()
+    # 1, t, c, h, w 
+    outputs = net(x_in, 1)
+    end = time.time()
+    inference_times.append(end - start)
+
+    # Saves plot
+    plt.matshow(outputs[0,0,0].cpu().detach().numpy())
+    plt.savefig(test_dir + "/pred_{}.png".format(s))
+    plt.clf()
     
-    # b, t, c, h, w 
-    x_in, y = datapoint
-    print(x_in.shape)
-    raise KeyboardInterrupt
-
-    for s in args.future_frames:
-
-        start = time.time()
-        # 1, t, c, h, w 
-        outputs = net(x, 1)
-        end = time.time()
-        inference_times.append(end - start)
-
-        tmp = np.empty(x_in.shape)
-        
+    plt.matshow(y[0,s,0].cpu().detach().numpy())
+    plt.savefig(test_dir + "/true_{}.png".format(s))
+    plt.clf()
 
     # 1, c, h, w
-    img1 = Variable(outputs[0, :, 0, :, :].unsqueeze(0), requires_grad=False)
-    img2 = Variable(y[0, 0, :, :, :].unsqueeze(0), requires_grad=True)
+    img1 = Variable(outputs[0,0,0].unsqueeze(0).unsqueeze(0), requires_grad=False)
+    img2 = Variable(y[0,s,0].unsqueeze(0).unsqueeze(0), requires_grad=True)
 
-    curr_ssim = ssim(img1, img2)
-    curr_l1 = l1(img1, img2)
-    curr_l2 = l2(img1, img2)
+    ssim_score += ssim(img1, img2)
+    l1_score += l1(img1, img2)
+    l2_score += l2(img1, img2)
 
-    ssim_score += curr_ssim
-    l1_score += curr_l1
-    l2_score += curr_l2
+    # Builds a new sequence with its own prediction
+    tmp = th.empty(x_in.shape)
+    tmp[0, :(args.past_frames-1), :, :, :] = x_in[0, 1:, :, :, :] # get last n-1 frames
+    
+    # output + btm
+    new_frame = th.cat((
+        outputs[:,:,0,:,:], 
+        x_in[:, 0, 3, :, :].unsqueeze(0)
+    ), dim=1) 
 
-    # ------------- Plotting
-    test_dir = "runs/" + foldername + "/test_{}".format(t)
-    os.mkdir(test_dir)
+    tmp[0, -1, :, :, :] = new_frame
+    x_in = tmp
 
-    # Saving single images
-    if args.test_flight is None:
-        plt.figure().clear()
-        plt.close()
-        plt.cla()
-        plt.clf()
+    print(". ", end="", flush=True)
 
-        for i, frame in enumerate(x[0]):
-            plt.matshow(frame[0].cpu().detach().numpy())
-            plt.savefig(test_dir + "/{}.png".format(i))
-
-        plt.matshow(outputs[0,0,0,:,:].cpu().detach().numpy())
-        plt.savefig(test_dir + "/predicted.png")
-
-        plt.matshow(y[0, 0, 0, :, :].cpu().detach().numpy())
-        plt.savefig(test_dir + "/ground_truth.png")
-
-    # Write stats
-    text_file = open("runs/" + foldername + "/test_{}/scores.txt".format(t), "w")
-    n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(curr_ssim, curr_l1, curr_l2))
-    text_file.close()
-
-    # ----------------
-
-ssim_score = ssim_score/args.n_tests
-l1_score = l1_score/args.n_tests
-l2_score = l2_score/args.n_tests
+ssim_score = ssim_score/args.future_frames
+l1_score = l1_score/args.future_frames
+l2_score = l2_score/args.future_frames
 
 stats = "SSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(ssim_score, l1_score, l2_score, np.mean(inference_times))
+print(stats, flush=True)
 
 text_file = open("runs/" + foldername + "/avg_score.txt", "w")
 n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
 text_file.close()
 
-# ------------------------------

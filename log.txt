@@ -292,8 +292,13 @@ problemi:
 
 Idee:
     - quando itera in get_item, l'indice serve solo come iterazione, poi crea il batch, marca le sequenze lette e continua
-    - costruire un batch in otf legacy anziché accumulare i gradienti
+    [x] costruire un batch in otf legacy anziché accumulare i gradienti
 
+======= 19/08/2021 =======
+
+- Modalitá autoregressive: il modello impara la progressione, ma non dal punto dove
+c'é molta massa (l'acqua cresce, ma un po' ovunque). Quindi forse va moltiplicata la colonna DEP
+per le velocitá?
 
 ======= TASKS =======
 
