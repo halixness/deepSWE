@@ -167,10 +167,14 @@ parts = partitions.get_partitions()
 # Random indexes
 random_accesses = []
 for i, area in enumerate(parts):
-    for j, sequence in enumerate(area[1]):
+
+    # random shuffle within the area only
+    sequences = area[1]
+    np.random.shuffle(sequences)
+    
+    for j, sequence in enumerate(sequences):
         random_accesses.append([i, sequence, None])
 
-np.random.shuffle(random_accesses)
 print("[~] Virtually shuffled the dataset, total sequences: {}".format(len(random_accesses)))
 
 # Initializing batches
@@ -228,7 +232,6 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                     
                     loss = criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
 
-                    optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
 
