@@ -94,6 +94,8 @@ parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
 parser.add_argument('-out_channels', dest='out_channels', default=1, type=int,
                     help='number of input channels')
+parser.add_argument('-checkpoint', dest='checkpoint', default=0.1, type=float,
+                    help='Percentage of dataset at which saving the network weights')
 
 
 args = parser.parse_args()
@@ -176,9 +178,17 @@ batch_x = np.empty((args.batch_size, args.past_frames, args.image_size, args.ima
 batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
 k = 0
 
+checkpoint = int(args.checkpoint * len(random_accesses))
+print("[~] Network weights will be saved each {} samples".format(checkpoint))
+
 # Training loop
 for epoch in range(epochs):  # loop over the dataset multiple times
     for i, access in enumerate(random_accesses):
+
+        # Checkpoint weights saving
+        if i % checkpoint == 0:
+            weights_path = "runs/" + foldername + "/epoch_{}_chk_{}.weights".format(epoch, i)
+            th.save(net.state_dict(), weights_path)
         
         # False mark -> invalid datapoint
         if access[2] != False:
