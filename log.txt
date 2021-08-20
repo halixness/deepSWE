@@ -300,8 +300,15 @@ Idee:
 - Modalitá autoregressive: il modello impara la progressione, ma non dal punto dove
 c'é molta massa (l'acqua cresce, ma un po' ovunque). 
     - Quindi forse va moltiplicata la colonna DEP per le velocitá? 
-    - Modalitá 1tomany lstm da provare!
 - Test traning modalitá 1tomany
+- otf traning:
+    - inserito lo shuffle delle sequenze
+        - batch coherent sequences: training presumibilmente migliore
+        - non coherent: piú lento, ma la loss scende, forse piú robusta
+
+======= 20/08/2021 =======
+
+- training otf: troppe poche epochs, funziona ma é prematuro
 
 ======= TASKS =======
 

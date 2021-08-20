@@ -74,11 +74,11 @@ parser.add_argument('-image_size', dest='image_size', default=256, type=int,
                     help='image size (width = height)')
 parser.add_argument('-b', dest='batch_size', default=4, type=int,
                     help='batch size') 
-parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
+parser.add_argument('-d', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
-parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
+parser.add_argument('-bs', dest='buffer_size', default=1e4, type=float,
                     help='size of the cache memory (in entries)')
-parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
+parser.add_argument('-t', dest='buffer_memory', default=1000, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
 parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
                     const=True, help='enable 2x downsampling (with gaussian filter)')  
@@ -135,10 +135,10 @@ dataset = DataGenerator(
     input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
     output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
     batch_size=args.batch_size,
-    buffer_size=1e3,
-    buffer_memory=100,
+    buffer_size=args.buffer_size,
+    buffer_memory=args.buffer_memory,
     downsampling=False,
-    dynamicity = 1e-1
+    dynamicity = args.dynamicity
 )
 
 # ---- Model

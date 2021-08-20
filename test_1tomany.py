@@ -85,7 +85,7 @@ parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
-parser.add_argument('-ffuture_frames', dest='future_frames', default=1, type=int, 
+parser.add_argument('-future_frames', dest='future_frames', default=1, type=int, 
                     help='number of future frames')       
 parser.add_argument('-partial', dest='partial', default=None, type=float,
                     help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
@@ -191,45 +191,32 @@ for i, frame in enumerate(x_in[0]):
     plt.clf()
 
 # predicting
-for s in range(args.future_frames):
+start = time.time()
+# 1, t, c, h, w 
+outputs = net(x_in, args.future_frames)
+end = time.time()
+inference_times.append(end - start)
 
-    start = time.time()
-    # 1, t, c, h, w 
-    outputs = net(x_in, 1)
-    end = time.time()
-    inference_times.append(end - start)
+outputs = outputs.permute(0, 2, 1, 3, 4)
 
-    # Saves plot
-    plt.matshow(outputs[0,0,0].cpu().detach().numpy())
-    plt.savefig(test_dir + "/pred_{}.png".format(s))
+# Saves plot
+for i, frame in enumerate(outputs[0]):
+    plt.matshow(frame[0].cpu().detach().numpy())
+    plt.savefig(test_dir + "/pred_{}.png".format(i))
     plt.clf()
-    
-    plt.matshow(y[0,s,0].cpu().detach().numpy())
-    plt.savefig(test_dir + "/true_{}.png".format(s))
+
+for i, frame in enumerate(y[0]):
+    plt.matshow(frame[0].cpu().detach().numpy())
+    plt.savefig(test_dir + "/true_{}.png".format(i))
     plt.clf()
 
     # 1, c, h, w
-    img1 = Variable(outputs[0,0,0].unsqueeze(0).unsqueeze(0), requires_grad=False)
-    img2 = Variable(y[0,s,0].unsqueeze(0).unsqueeze(0), requires_grad=True)
+    img1 = Variable(outputs[0,i,0].unsqueeze(0).unsqueeze(0), requires_grad=False)
+    img2 = Variable(y[0,i,0].unsqueeze(0).unsqueeze(0), requires_grad=True)
 
     ssim_score += ssim(img1, img2)
     l1_score += l1(img1, img2)
     l2_score += l2(img1, img2)
-
-    # Builds a new sequence with its own prediction
-    tmp = th.empty(x_in.shape)
-    tmp[0, :(args.past_frames-1), :, :, :] = x_in[0, 1:, :, :, :] # get last n-1 frames
-    
-    # output + btm
-    new_frame = th.cat((
-        outputs[:,:,0,:,:], 
-        x_in[:, 0, 3, :, :].unsqueeze(0)
-    ), dim=1) 
-
-    tmp[0, -1, :, :, :] = new_frame
-    x_in = tmp
-
-    print(". ", end="", flush=True)
 
 ssim_score = ssim_score/args.future_frames
 l1_score = l1_score/args.future_frames
