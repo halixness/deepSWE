@@ -18,6 +18,8 @@ import time
 from models.ae import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
+from threading import Thread
+
 mat.use("Agg") # headless mode
 
 # -------------- Functions
@@ -185,14 +187,50 @@ k = 0
 checkpoint = int(args.checkpoint * len(random_accesses))
 print("[~] Network weights will be saved each {} samples".format(checkpoint))
 
+results = []
+def get_datapoint(access, check=False):
+    results.append(
+        dataset.get_datapoint(access[0], access[1], check=check)
+    )
+    print("done")
+
 # Training loop
 for epoch in range(epochs):  # loop over the dataset multiple times
+
+    i = 0
+    while i < len(random_accesses):
+        
+        threads = []
+
+        # Start x parallel threads
+        for x in range(2):
+            access = random_accesses[i] 
+            process = Thread(target=get_datapoint, args=(access,))
+            threads.append(process)
+            process.start()
+            i += 1
+            print("Started thread {}...".format(x))
+
+        # Waiting for each to end
+        print("waiting threads...")
+        start = time.time()
+        for process in threads:
+            process.join()
+        end = time.time()
+        print("load time: {}".format(end - start))
+
+        print(len(results))
+        raise KeyboardInterrupt
+
+
     for i, access in enumerate(random_accesses):
 
         # Checkpoint weights saving
         if i % checkpoint == 0:
             weights_path = "runs/" + foldername + "/epoch_{}_chk_{}.weights".format(epoch, i)
             th.save(net.state_dict(), weights_path)
+
+        
         
         # False mark -> invalid datapoint
         if access[2] != False:
@@ -201,11 +239,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             if access[2] == True: check = False
             else: check = True
     
-            #start = time.time()
             datapoint = dataset.get_datapoint(access[0], access[1], check=check)
-            #end = time.time()
-            #print("load time: {}".format(end - start))
-
+            
             # If the sequence is invalid -> mark it
             if datapoint == None:
                 random_accesses[i][2] = False
@@ -269,186 +304,3 @@ if args.test_flight is None:
 plt.clf()
 
 print("Avg.training time: {}".format(np.mean(training_times)))
-
-
-# In[26]:
-'''
-
-plt.title("relative error")
-plt.plot(range(len(errors)), errors, label="train")
-plt.plot(range(len(test_errors)), test_errors, label="test")
-plt.legend()
-pass
-
-# In[27]:
-
-
-mpl.rcParams['text.color'] = 'w'
-prep = Preprocessing()
-
-
-# In[28]:
-
-
-j = np.random.randint(len(y_test))
-j = 3
-m = 2
-k = 4
-
-print("k = {}".format(k))
-
-#k = 5
-input = th.unsqueeze(X_test[j, m], 0)
-outputs = net(input)
-
-#------------------------------
-num_predicted_frames = outputs[0, 0].shape[0] # per allineare frames passati e futuri
-fig, axs = plt.subplots(1, num_predicted_frames, figsize=(plotsize,plotsize))
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-for i,frame in enumerate(input[0,0,-num_predicted_frames:]):
-    frame = frame.cpu().detach().numpy()
-    axs[i].matshow(frame)
-    axs[i].set_title('t = {}'.format(i))
-
-print("======== Past frames ========")
-plt.show()
-
-print("======== True Future vs Predicted frames ========")
-
-#------------------------------
-fig, axs = plt.subplots(1, num_predicted_frames, figsize=(plotsize,plotsize))
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-for i,frame in enumerate(y_test[j,m,0]):
-    axs[i].matshow(frame.cpu().detach().numpy())
-    axs[i].set_title('t = {}'.format(i+num_predicted_frames))
-
-plt.show()
-#------------------------------
-fig, axs = plt.subplots(1, outputs[0,0].shape[0], figsize=(plotsize,plotsize))
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-for i,frame in enumerate(outputs[0,0]):
-    attention_mask = outputs[0,1,i].cpu().detach().numpy()
-    y_frame = frame.cpu().detach().numpy()
-    y_true = y_test[j,m,0,i].cpu().detach().numpy()
-
-    y_frame = np.dot(y_frame, attention_mask)
-    y_true = np.dot(y_true, attention_mask)
-
-    print(y_frame[:5,:5])
-    print("#-------------")
-    print(y_true[:5,:5])
-    print("\n\n")
-
-    ssim = prep.pytorch_ssim(y_true, y_frame).item()
-    axs[i].matshow(y_frame)
-    axs[i].set_title('ssim = {}'.format(ssim))
-
-plt.show()
-#------------------------------
-
-
-# In[29]:
-
-
-print("k = {}".format(k))
-iterations = 4
-#k = 5
-
-input = th.unsqueeze(X_train[k,0], 0)
-outputs = net(input)
-
-#------------------------------
-print("======== Past frames ========")
-num_predicted_frames = outputs[0,0].shape[0] # per allineare frames passati e futuri
-fig, axs = plt.subplots(1, num_predicted_frames, figsize=(plotsize,plotsize))
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-for i,frame in enumerate(input[0,0,-num_predicted_frames:]):
-    axs[i].matshow(frame.cpu().detach().numpy())
-    axs[i].set_title('t = {}'.format(i))
-
-plt.show()
-#------------------------------
-print("======== True vs Autoregressive Pred Frames  ========")
-fig, axs = plt.subplots(1, num_predicted_frames, figsize=(plotsize,plotsize))
-
-true_means = []
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-for i,frame in enumerate(y_train[k,0,0]):
-    axs[i].matshow(frame.cpu().detach().numpy())
-    axs[i].set_title('t = {}'.format(i+num_predicted_frames))
-    true_means.append(frame.cpu().detach().numpy().mean())
-
-plt.show()
-#------------------------------
-
-#i = np.random.randint(len(X_test))
-input = th.unsqueeze(X_train[k][0], 0)
-
-fig, axs = plt.subplots(1, iterations, figsize=(plotsize,plotsize))
-
-for ax in axs:
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-
-predicted_means = []
-for x in range(iterations):
-    # first predicted frame only
-    output = th.unsqueeze(net(input)[:,:,0,:,:],2)
-    # next frame = first predicted from output + btm map
-    next_frame = output.detach()
-    next_frame = th.cat((next_frame, th.unsqueeze(input[:,2:,0,:,:],2)), axis=1)
-    # added on top of (input sequence - first frame)
-    input = th.cat((next_frame, input[:,:,1:,:]), axis=2)
-
-    axs[x].matshow(output[0,0,0].cpu().detach().numpy())
-    axs[x].set_title('t = {}'.format(x+num_predicted_frames))
-    predicted_means.append(output[0,0,0].cpu().detach().numpy().mean())
-    #print(np.mean(output[0,0,0].cpu().detach().numpy()))
-
-plt.show()
-
-
-# In[30]:
-
-
-mpl.rcParams['text.color'] = 'b'
-
-plt.clf()
-plt.plot(range(len(true_means)), true_means,  "-b", label="True frames mean")
-plt.plot(range(len(true_means)), true_means,  "*")
-
-plt.plot(range(len(predicted_means)), predicted_means,  "-g", label="Predicted frames mean")
-plt.plot(range(len(predicted_means)), predicted_means,  "*")
-plt.grid()
-plt.legend()
-pass
-
-
-# In[31]:
-
-
-print("{:<20s}{:<20s}{:<20s}{:<20s}{:<20s}".format("", "min", "max", "mean", "std"))
-print("{:<20s}{:<20f}{:<20f}{:<20f}{:<20f}".format("prediction", th.min(outputs), th.max(outputs), th.mean(outputs), th.std(outputs)))
-print("{:<20s}{:<20f}{:<20f}{:<20f}{:<20f}".format("true", th.min(y_test[0]), th.max(y_test[0]), th.mean(y_test[0]), th.std(y_test[0])))
-
-'''

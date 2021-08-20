@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np, pandas as pd
 import os
 from tqdm import tqdm
 import math
@@ -11,6 +11,21 @@ def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
     return a[p], b[p]
+
+def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
+    def iter_func():
+        with open(filename, 'r') as infile:
+            for _ in range(skiprows):
+                next(infile)
+            for line in infile:
+                line = line.rstrip().split(delimiter)
+                for item in line:
+                    yield dtype(item)
+        iter_loadtxt.rowlength = len(line)
+
+    data = np.fromiter(iter_func(), dtype=dtype)
+    data = data.reshape((-1, iter_loadtxt.rowlength))
+    return data
 
 # ------------------------------------------------------------------------------
 
@@ -279,7 +294,8 @@ class DataGenerator():
                 btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
                 if len(btm_filenames) == 0:
                     raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-                btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+                #btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+                btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
 
                 # --- Preprocessing
                 if self.downsampling:
@@ -328,7 +344,9 @@ class DataGenerator():
                             global_id
                         )
                         if cache is False:
-                            frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                            #frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                            frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext), delimiter=" ")
+                            
                             # --- On-spot Gaussian Blurring
                             if self.downsampling:
                                 frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
@@ -443,7 +461,8 @@ class DataGenerator():
         btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
         if len(btm_filenames) == 0:
             raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-        btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+        #btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+        btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
 
         # --- Preprocessing
         if self.downsampling:
@@ -492,8 +511,9 @@ class DataGenerator():
                     global_id
                 )
                 if cache is False:
-                    frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
-
+                    #frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                    frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext), delimiter=" ")
+                    
                     # --- On-spot Gaussian Blurring
                     if self.downsampling:
                         frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
