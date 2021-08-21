@@ -183,6 +183,14 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         if i % checkpoint == 0:
             weights_path = "runs/" + foldername + "/epoch_{}_chk_{}.weights".format(epoch, i)
             th.save(net.state_dict(), weights_path)
+            
+            # Loss plot
+            mpl.rcParams['text.color'] = 'k'
+            plt.title("average loss")
+            plt.plot(range(len(losses)), losses)
+            if args.test_flight is None:
+                plt.savefig("runs/" + foldername + "/loss_{}_chk_{}.png".format(epoch, i))
+            plt.clf()
         
         # False mark -> invalid datapoint
         if access[2] != False:
