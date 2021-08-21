@@ -18,5 +18,5 @@ source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate swe-cv-pytorch
 
 cd ..
-python -u train_grid.py -r ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -epochs 500 -lr 0.0001 -p 6 -s 0.2 -i 768 -out_channels 3
+python -u train_grid.py -r ../datasets/arda/ -epochs 500 -lr 0.0001 -p 6 -s 0.2 -i 768 -out_channels 3
 

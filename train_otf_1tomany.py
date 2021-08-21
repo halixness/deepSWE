@@ -99,7 +99,7 @@ if args.root is None:
 if args.test_flight is None:
     num_run = len(os.listdir("runs/")) + 1
     now = datetime.now()
-    foldername = "train_otf_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+    foldername = "train_otf_1tomany_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
     os.mkdir("runs/" + foldername)
 
 # -------------------------------

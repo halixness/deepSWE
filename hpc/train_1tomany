@@ -19,4 +19,4 @@ conda activate swe-cv-pytorch
 
 cd ..
 #python -u train_1tomany.py -r ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -epochs 500 -lr 0.0001 -p 6 -s 0.2 -i 768 -out_channels 3 -future_frames 4
-python train_1tomany.py -root ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -partial 0.2 -future_frames 4 -out_channels 3 -image_size 768
+python train_1tomany.py -root ../datasets/arda/ -partial 0.2 -future_frames 4 -out_channels 3 -image_size 768 -epochs 500
