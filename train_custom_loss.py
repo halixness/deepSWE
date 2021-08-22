@@ -25,15 +25,12 @@ mat.use("Agg") # headless mode
 
 # -------------- Functions
 
-def residual_partial_mse(output, target, threshold=0):
+def residual_partial_mse(prior, output, target, threshold=0):
     
     # t, h, w
     # compares the difference between n and n+1 frame with ground truth and prediction
     # masking prediction to force predicting water levels (not houses)
     #output = output[:,:,0] * output[:,:,1]
-
-    #pred_residual = th.abs(output - prior)
-    #target_residual = th.abs(target[:,:,0] - prior)
 
     #plt.matshow(target_residual[0,0])
     #plt.savefig("runs/" + foldername + "/residual.png", vmin=0, vmax=10)
@@ -54,9 +51,17 @@ def residual_partial_mse(output, target, threshold=0):
     n_cells = max(n_target_wet_cells, n_pred_wet_cells)
 
     # MSE but I'm not using th.mean()
-    loss = th.sum(
-        (output - target)**2
-    ) / n_cells
+    if args.residual_loss:
+        pred_residual = th.abs(output - prior)
+        target_residual = th.abs(target[:,:,0] - prior)
+        
+        loss = th.sum(
+            (pred_residual - target_residual)**2
+        ) / n_cells
+    else:
+        loss = th.sum(
+            (output - target)**2
+        ) / n_cells
 
     return loss
 
@@ -117,6 +122,8 @@ parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
 parser.add_argument('-out_channels', dest='out_channels', default=1, type=int,
+                    help='number of input channels')
+parser.add_argument('-residual_loss', dest='residual_loss', default=False, type=str2bool,
                     help='number of input channels')
 
 
@@ -204,11 +211,11 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         # ---- Batch Loss
         # central square only 
-        #prior_frame = batch[:,-1,0,:,:].unsqueeze(1) # last frame
+        prior_frame = batch[:,-1,0,:,:].unsqueeze(1) # last frame
         output_dep = outputs[:,:,:,:,:]
         target_dep = y_train[i, :,:,:,:,:]
 
-        loss = residual_partial_mse(output_dep, target_dep)
+        loss = residual_partial_mse(prior_frame, output_dep, target_dep)
         #loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
 
         loss.backward()
