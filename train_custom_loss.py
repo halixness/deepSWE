@@ -93,9 +93,9 @@ parser.add_argument('-npy', dest='numpy_file',
                     help='path to a npy stored dataset')
 parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
-parser.add_argument('-p', dest='past_frames', default=4, type=int,
+parser.add_argument('-past_frames', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
-parser.add_argument('-f', dest='future_frames', default=1, type=int, 
+parser.add_argument('-future_frames', dest='future_frames', default=1, type=int, 
                     help='number of future frames')       
 parser.add_argument('-partial', dest='partial', default=None, type=float,
                     help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
@@ -206,8 +206,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         # ---- Predicting
 
         start = time.time()
-        outputs = net(batch, 1)  # 0 for layer index, 0 for h index
-        outputs = outputs.permute(0, 2, 1, 3, 4) 
+        outputs = net(batch, args.future_frames)  # 0 for layer index, 0 for h index
+        outputs = outputs.permute(0, 2, 1, 3, 4)
 
         # ---- Batch Loss
         # central square only 
