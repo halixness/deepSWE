@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=SWE_deepTraining
+#SBATCH --output=%x.o%j
+#SBATCH --error=%x.e%j
+#SBATCH --nodes=1
+#SBATCH --tasks-per-node=1
+#SBATCH --gres=gpu:a100:1
+#SBATCH --partition=gpu
+#SBATCH --mem=160G
+#SBATCH --time=2:00:00
+
+# al piu' 128gb di ram per gpu in media
+# con il comando 'seff' controllo efficienza memoria
+# --gres=gpu:1
+
+module load miniconda3
+source "$CONDA_PREFIX/etc/profile.d/conda.sh" 
+conda activate swe-cv-pytorch
+
+cd ..
+#python -u train_grid.py -r ../datasets/arda/ -epochs 200 -lr 0.0001 -p 4 -f 4 -s 0.1 -i 768 -out_channels 3
+python keras_test.py -root ../datasets/baganza/ -partial 0.3
