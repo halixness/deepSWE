@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=SWE_otfTraining
+#SBATCH --job-name=SWE_deepTraining
 #SBATCH --output=%x.o%j
 #SBATCH --error=%x.e%j
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:a100:1
 #SBATCH --partition=gpu
-#SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --mem=160G
+#SBATCH --time=2:00:00
 
 # al piu' 128gb di ram per gpu in media
 # con il comando 'seff' controllo efficienza memoria
@@ -18,4 +18,4 @@ source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate swe-cv-pytorch
 
 cd ..
-python -u train_otf_grid.py -root ../datasets/arda/ -epochs 500 -image_size 768 -out_channels 3 -buffer_size 100 -buffer_memory 100
+python -u train_custom_loss.py -root ../datasets/arda/ -epochs 200 -partial 0.1 -image_size 768 -out_channels 3 -past_frames 4 -hidden_layers 16

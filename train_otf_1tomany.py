@@ -70,9 +70,9 @@ parser.add_argument('-b', dest='batch_size', default=4, type=int,
                     help='batch size') 
 parser.add_argument('-d', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
-parser.add_argument('-bs', dest='buffer_size', default=1e4, type=float,
+parser.add_argument('-buffer_size', dest='buffer_size', default=1e4, type=float,
                     help='size of the cache memory (in entries)')
-parser.add_argument('-t', dest='buffer_memory', default=1000, type=int,
+parser.add_argument('-buffer_memory', dest='buffer_memory', default=1000, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
 parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
                     help='learning rate')                                              

@@ -180,12 +180,13 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         # ---- Predicting
 
         start = time.time()
-        outputs = net(batch, 1)  # 0 for layer index, 0 for h index
+        outputs = net(batch, args.future_frames)  # 0 for layer index, 0 for h index
 
         # ---- Batch Loss
         # central square only 
-        loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
-
+        #loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
+        loss = criterion(outputs[:, :args.out_channels, 0, :, :], y_train[i, :, 0, :args.out_channels, :, :])  
+ 
         loss.backward()
         optimizer.step()
 

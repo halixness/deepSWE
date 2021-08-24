@@ -207,20 +207,20 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         start = time.time()
         outputs = net(batch, args.future_frames)  # 0 for layer index, 0 for h index
-        outputs = outputs.permute(0, 2, 1, 3, 4)
+        #outputs = outputs.permute(0, 2, 1, 3, 4)
 
         # ---- Batch Loss
         # central square only 
-        prior_frame = batch[:,-1,0,:,:].unsqueeze(1) # last frame
-        output_dep = outputs[:,:,:,:,:]
-        target_dep = y_train[i, :,:,:,:,:]
+        #prior_frame = batch[:,-1,0,:,:].unsqueeze(1) # last frame
+        #output_dep = outputs[:,:,:,:,:]
+        #target_dep = y_train[i, :,:,:,:,:]
 
-        loss = residual_partial_mse(prior_frame, output_dep, target_dep)
-        #loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
+        #loss = residual_partial_mse(prior_frame, output_dep, target_dep)
+        loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
 
         loss.backward()
         optimizer.step()
-
+        
         end = time.time()
         training_times.append(end - start)
 
@@ -231,6 +231,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             avg_losses.append(np.mean(losses))
 
     if epoch % 2 == 0:
+        print("plotting")
 
         k = np.random.randint(len(X_test))
 
