@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import time
+from tensorflow.python.client import device_lib
 
 mat.use("Agg") # headless mode
 
@@ -55,6 +56,7 @@ parser.add_argument('-epochs', dest='epochs', default=100, type=float,
 
 # -------------------------------
   
+print(device_lib.list_local_devices())
 
 args = parser.parse_args()
 
