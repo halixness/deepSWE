@@ -1,9 +1,8 @@
-from utils.dataloader import DataLoader, DataPartitions, DataGenerator
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
-import matplotlib.patches as patches
 
 import argparse
 

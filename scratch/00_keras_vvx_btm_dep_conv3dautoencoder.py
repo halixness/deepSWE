@@ -6,7 +6,7 @@
 # In[ ]:
 
 
-from utils.dataloader import DataPartitions, DataGenerator
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 
 
 # In[ ]:
@@ -66,11 +66,9 @@ test_dataset = DataGenerator(
 
 import numpy as np
 import os
-from pathlib import Path
 import tqdm
 import matplotlib.pyplot as plt
-import random
-import tqdm 
+import tqdm
 
 get_ipython().run_line_magic('matplotlib', 'inline')
 
@@ -79,24 +77,16 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers import Adam
 
 import keras.layers.advanced_activations as advanced_activations
-import keras.activations as activations
 import keras.layers as layers
-from keras.layers import Dense, concatenate
-from keras.callbacks import EarlyStopping
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import Conv2D, Conv3D, Conv3DTranspose
-from tensorflow.keras.layers import MaxPooling3D
 from tensorflow.keras.layers import AveragePooling3D
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Dropout, Add
-from tensorflow.keras.layers import Dense, LSTM
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import Reshape
@@ -147,9 +137,6 @@ tf.__version__
 # ### Model
 
 # In[12]:
-
-
-import tensorflow.keras.layers 
 
 
 # In[13]:

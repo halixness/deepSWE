@@ -4,7 +4,7 @@
 # In[20]:
 
 
-from utils.dataloader import DataLoader, DataPartitions, DataGenerator
+from utils.data_legacy.dataloader import DataLoader, DataPartitions, DataGenerator
 import numpy as np
 
 import matplotlib.pyplot as plt

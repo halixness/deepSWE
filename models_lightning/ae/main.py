@@ -7,12 +7,18 @@ import torch.optim as optim
 from models.ae.ConvLSTMCell import ConvLSTMCell
 
 class deepSWE(pl.LightningModule):
-    def __init__(self, nf, in_chan, out_chan=1):
+    def __init__(self, nf, in_chan, out_chan, future_frames=1, image_size=256):
         super(deepSWE, self).__init__()
+
+        self.nf = nf
+        self.in_chan = in_chan
+        self.out_chan = out_chan
+        self.future_frames = future_frames
+        self.image_size = image_size
 
         self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=nf,
-                                               kernel_size=(3, 3),
+                                               kernel_size=(5, 5),
                                                bias=True)
 
         self.encoder_2_convlstm = ConvLSTMCell(input_dim=nf,
@@ -27,7 +33,7 @@ class deepSWE(pl.LightningModule):
 
         self.decoder_2_convlstm = ConvLSTMCell(input_dim=nf,
                                                hidden_dim=nf,
-                                               kernel_size=(3, 3),
+                                               kernel_size=(5, 5),
                                                bias=True)
 
         self.decoder_CNN = nn.Conv3d(in_channels=nf,
@@ -35,7 +41,7 @@ class deepSWE(pl.LightningModule):
                                      kernel_size=(1, 3, 3),
                                      padding=(0, 1, 1))
 
-    # ------------------------------------------------                                     
+    # ------------------------------------------------
 
     def mse_loss(self, input, target):
         return F.mse_loss(input, target, reduction='sum') # reduction='sum'
@@ -44,30 +50,33 @@ class deepSWE(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
 
+    '''
+    def training_epoch_end(self, outputs):
+        if (self.current_epoch == 0): # save computational graph
+            sampleImg = torch.rand((1, 4, 4, self.image_size, self.image_size))
+            self.logger.experiment.add_graph(deepSWE(self.nf, self.in_chan, self.out_chan), sampleImg)
+    '''
+
     def training_step(self, train_batch, batch_idx):
 
-        if train_batch is not None:
+        x, y = train_batch
 
-            x, y = train_batch
-            
-            logits = self.forward(x[:,0], 1)
+        logits = self.forward(x, self.future_frames)
+        logits = logits.permute(0, 2, 1, 3, 4)
 
-            loss = self.mse_loss(logits[:, :, 0, :, :] , y[:, 0, 0, :, :])
-            self.log('train_loss', loss)
+        loss = self.mse_loss(logits, y)
+        self.log('train_loss', loss)
 
-            return loss
-        else:
-            return None
+        return loss
 
     def validation_step(self, val_batch, batch_idx):
+        x, y = val_batch
 
-        if val_batch is not None:
-            x, y = val_batch
+        logits = self.forward(x, self.future_frames)
+        logits = logits.permute(0, 2, 1, 3, 4)
 
-            logits = self.forward(x[:,0], 1)
-
-            loss = self.mse_loss(logits[:, :, 0, :, :] , y[:, 0, 0, :, :])
-            self.log('val_loss', loss)
+        loss = self.mse_loss(logits, y)
+        self.log('val_loss', loss)
 
 
     # ------------------------------------------------
@@ -98,7 +107,7 @@ class deepSWE(pl.LightningModule):
         outputs = torch.stack(outputs, 1)
         outputs = outputs.permute(0, 2, 1, 3, 4)
         outputs = self.decoder_CNN(outputs)
-        outputs = torch.nn.LeakyReLU()(outputs)
+        outputs = torch.nn.ReLU()(outputs)
 
         return outputs
 

@@ -1,9 +1,8 @@
-from utils.dataloader import DataLoader, DataPartitions, DataGenerator
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
-import matplotlib.patches as patches
 
 import argparse
 
@@ -13,7 +12,6 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
-import time
 
 from models.ae import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
