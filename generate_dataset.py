@@ -1,24 +1,7 @@
-from utils.dataloader import DataPartitions, DataGenerator
-import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-
-import matplotlib.pyplot as plt
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 
 import numpy as np
 
-import torch as th
-import torch.nn as nn
-import os
-from datetime import datetime
-import matplotlib as mpl
-import torch.optim as optim
-import pytorch_ssim
-
-import torch.nn.functional as F
-import torchvision.models as models
-from torch.autograd import Variable
-import torchvision.transforms as transforms
 import argparse
 
 # -------------------------------

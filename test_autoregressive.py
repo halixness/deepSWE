@@ -1,18 +1,13 @@
 # %%
 import os
 from datetime import datetime
-from utils.dataloader_pl import SWEDataset
+from utils.data_lightning.otf import SWEDataset
 import numpy as np
-from sklearn.model_selection import train_test_split
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
-import matplotlib.patches as patches
 
 import torch as th
-import torch.optim as optim
-import torch.nn as nn
-import pytorch_ssim
 from torch.autograd import Variable
 
 from models.ae import seq2seq_NFLSTM

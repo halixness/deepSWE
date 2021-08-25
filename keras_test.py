@@ -1,16 +1,10 @@
-import numpy as np
-import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-from utils.dataloader_keras import DataLoader, DataPartitions, DataGenerator
-import matplotlib.pyplot as plt
+from utils.data_legacy.dataloader_keras import DataLoader
 import matplotlib as mat
-import matplotlib.patches as patches
 import argparse
 import os
 from datetime import datetime
-import matplotlib as mpl
-import time
 
 mat.use("Agg") # headless mode
 

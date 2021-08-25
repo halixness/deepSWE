@@ -1,6 +1,6 @@
 #%%
 
-from utils.dataloader import DataPartitions, DataGenerator
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
