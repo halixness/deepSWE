@@ -10,11 +10,26 @@ import torch as th
 from torch.utils.data import Dataset, random_split, DataLoader
 import pytorch_lightning as pl
 
+def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
+    def iter_func():
+        with open(filename, 'r') as infile:
+            for _ in range(skiprows):
+                next(infile)
+            for line in infile:
+                line = line.rstrip().split(delimiter)
+                for item in line:
+                    yield dtype(item)
+        iter_loadtxt.rowlength = len(line)
+
+    data = np.fromiter(iter_func(), dtype=dtype)
+    data = data.reshape((-1, iter_loadtxt.rowlength))
+    return data
+
 # ------------------------------------------------------------------------------
 
 class SWEDataModule(pl.LightningDataModule):
 
-    def __init__(self, root, past_frames, future_frames, filtering=True, test_size=0.1, val_size=0.1, partial=None):
+    def __init__(self, root, past_frames, future_frames, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -24,6 +39,12 @@ class SWEDataModule(pl.LightningDataModule):
         self.past_frames = past_frames
         self.future_frames = future_frames
         self.filtering = filtering
+        self.batch_size = batch_size
+        self.workers = workers
+        self.image_size = image_size
+        self.shuffle = shuffle
+        self.dynamicity = dynamicity
+        self.caching = caching
         
     def prepare_data(self):
 
@@ -32,7 +53,11 @@ class SWEDataModule(pl.LightningDataModule):
             past_frames=self.past_frames, 
             future_frames=self.future_frames,
             partial=self.partial,
-            filtering = self.filtering
+            filtering = self.filtering,
+            image_size=self.image_size,
+            shuffle=self.shuffle,
+            dynamicity=self.dynamicity,
+            caching=self.caching
         )
 
         test_len = int(max(1, len(dataset) * self.test_size))
@@ -40,9 +65,9 @@ class SWEDataModule(pl.LightningDataModule):
         train_len = len(dataset) - test_len - val_len
         datasets = random_split(dataset, [train_len, test_len, val_len])
 
-        self.train_loader = DataLoader(datasets[0], batch_size=4, num_workers=0)
-        self.test_loader = DataLoader(datasets[1], batch_size=4, num_workers=0)
-        self.val_loader = DataLoader(datasets[2], batch_size=4, num_workers=0)
+        self.train_loader = DataLoader(datasets[0], batch_size=self.batch_size, num_workers=self.workers)
+        self.test_loader = DataLoader(datasets[1], batch_size=self.batch_size, num_workers=self.workers)
+        self.val_loader = DataLoader(datasets[2], batch_size=self.batch_size, num_workers=self.workers)
 
     def train_dataloader(self):
         return self.train_loader
@@ -56,11 +81,8 @@ class SWEDataModule(pl.LightningDataModule):
 # ------------------------------------------------------------------------------
 
 class SWEDataset(Dataset):
-    def __init__(self, past_frames, future_frames, root, filtering=True, numpy_file=None, image_size=256, batch_size=4, dynamicity=1e-3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None, clipping_threshold=1e5, device="cpu"):
+    def __init__(self, past_frames, future_frames, root, shuffle=True, caching=False, filtering=True, image_size=256, batch_size=4, dynamicity=1e-3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None, clipping_threshold=1e5, device="cpu"):
         ''' Initiates the dataloading process '''
-
-        if root is None and numpy_file is None:
-            raise Exception("Please specify either a root path or a numpy file: -r /path -npy /dataset.py")
 
         self.filtering = filtering
 
@@ -82,7 +104,8 @@ class SWEDataset(Dataset):
             buffer_size=buffer_size,
             buffer_memory=buffer_memory,
             downsampling=False,
-            dynamicity=dynamicity
+            dynamicity=dynamicity,
+            caching=caching
         )
 
         self.valid_datapoints = dict()
@@ -291,7 +314,7 @@ class DataGenerator():
                 btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
                 if len(btm_filenames) == 0:
                     raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-                btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+                btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
 
                 # --- Preprocessing
                 if self.downsampling:
@@ -342,7 +365,7 @@ class DataGenerator():
                             global_id
                         )
                         if cache is False:
-                            frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                            frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
                             # --- On-spot Gaussian Blurring
                             if self.downsampling:
                                 frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
@@ -405,8 +428,7 @@ class DataGenerator():
                 y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
 
                 # filtering
-                sequence = np.concatenate((x[:,:,:,:3], y), axis=0)
-                score, valid = self.preprocessing.eval_datapoint(sequence, self.dynamicity)
+                score, valid = self.preprocessing.eval_datapoint(x[:,:,:,:3], y, self.dynamicity)
 
                 if valid:
 
@@ -454,7 +476,7 @@ class DataGenerator():
         btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
         if len(btm_filenames) == 0:
             raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-        btm = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
+        btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
 
         # --- Preprocessing
         if self.downsampling:
@@ -503,7 +525,7 @@ class DataGenerator():
                     global_id
                 )
                 if cache is False:
-                    frame = np.loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
+                    frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext), delimiter=" ")
                     # --- On-spot Gaussian Blurring
                     if self.downsampling:
                         frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
@@ -567,8 +589,7 @@ class DataGenerator():
 
         # filtering
         if check:
-            sequence = np.concatenate((x[:,:,:,:3], y), axis=0)
-            score, valid = self.preprocessing.eval_datapoint(sequence, self.dynamicity)
+            score, valid = self.preprocessing.eval_datapoint(x[:,:,:,:3], y, self.dynamicity)
 
             if valid:
 

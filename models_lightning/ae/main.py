@@ -124,7 +124,7 @@ class deepSWE(pl.LightningModule):
 
     # ------------------------------------------------
 
-    def forward(self, x, future_seq=0, hidden_state=None):
+    def forward(self, x, future_seq=1, hidden_state=None):
 
         """
         Parameters

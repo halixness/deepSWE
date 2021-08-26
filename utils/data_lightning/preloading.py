@@ -80,8 +80,8 @@ class SWEDataModule(pl.LightningDataModule):
 # ------------------------------------------------------------------------------
 
 class SWEDataset(Dataset):
-    def __init__(self, past_frames, future_frames, root, shuffle=True, filtering=True, caching=False, numpy_file=None, image_size=256, batch_size=4,
-                 dynamicity=1e-3, buffer_memory=100, buffer_size=1000, partial=None):
+    def __init__(self, past_frames, future_frames, root, dynamicity, shuffle=True, filtering=True, caching=False, numpy_file=None, image_size=256, batch_size=4,
+                 buffer_memory=100, buffer_size=1000, partial=None):
         ''' Initiates the dataloading process '''
 
         if root is None and numpy_file is None:
@@ -196,8 +196,8 @@ class DataPartitions():
 
 # ------------------------------------------------------------------------------
 class DataGenerator():
-    def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
-                 buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False, dynamicity=1e-3):
+    def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim, dynamicity,
+                 buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False, ):
         '''
             Data Generator
             Inputs:
@@ -309,22 +309,26 @@ class DataGenerator():
                         accesses += 1
                         global_id = "{}-{}".format(i, gid)  # indice linearizzato globale
 
-                        cache = self.buffer_lookup(
-                            global_id
-                        )
-                        if cache is False:
+                        # ----- Cache
+                        if self.caching:
+                            cache_frame = self.buffer_lookup(
+                                global_id
+                            )
+                            if cache_frame is False:
+                                frame = iter_loadtxt(
+                                    self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
+                                                                                                               k, ext), delimiter=" ")
+                                self.buffer_push(global_id, frame)
+                            else:
+                                frame = cache_frame
+                                hits += 1
+
+                        # ----- No cache
+                        else:
                             frame = iter_loadtxt(
                                 self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
                                                                                                            k, ext), delimiter=" ")
-                            # --- On-spot Gaussian Blurring
-                            if self.downsampling:
-                                frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
-                                frame = cv.pyrDown(frame)
-                            # ----
-                            self.buffer_push(global_id, frame)
-                        else:
-                            frame = cache
-                            hits += 1
+
                         matrices.append(frame)
 
                     frame, vvx, vvy = matrices
