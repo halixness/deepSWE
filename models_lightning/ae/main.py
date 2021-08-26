@@ -64,10 +64,14 @@ class deepSWE(pl.LightningModule):
 
         x, y = train_batch
 
+        center = int(x.shape[3]/3)
+        start = center
+        end = 2*center
+
         logits = self.forward(x, self.future_frames)
         logits = logits.permute(0, 2, 1, 3, 4)
 
-        loss = self.sse_loss(logits, y)
+        loss = self.sse_loss(logits[:,:,:,start:end, start:end], y[:,:,:,start:end, start:end])
         self.log('train_loss', loss)
 
         return loss
@@ -75,10 +79,14 @@ class deepSWE(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
 
+        center = int(x.shape[3] / 3)
+        start = center
+        end = 2 * center
+
         logits = self.forward(x, self.future_frames)
         logits = logits.permute(0, 2, 1, 3, 4)
 
-        loss = self.sse_loss(logits, y)
+        loss = self.sse_loss(logits[:, :, :, start:end, start:end], y[:, :, :, start:end, start:end])
         self.log('val_loss', loss)
 
 
