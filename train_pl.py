@@ -70,7 +70,8 @@ dataset = SWEDataModule(
     batch_size=args.batch_size,
     workers=args.workers,
     image_size=args.image_size,
-    shuffle=False
+    shuffle=False,
+    dynamicity=100
 )
 
 model = deepSWE(

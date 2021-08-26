@@ -28,7 +28,7 @@ def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
 
 class SWEDataModule(pl.LightningDataModule):
 
-    def __init__(self, root, past_frames, future_frames, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
+    def __init__(self, root, past_frames, future_frames, dynamicity=100, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -42,6 +42,7 @@ class SWEDataModule(pl.LightningDataModule):
         self.workers = workers
         self.image_size = image_size
         self.shuffle = shuffle
+        self.dynamicity = dynamicity
 
     def prepare_data(self):
         dataset = SWEDataset(
@@ -51,7 +52,8 @@ class SWEDataModule(pl.LightningDataModule):
             partial=self.partial,
             filtering=self.filtering,
             image_size=self.image_size,
-            shuffle=self.shuffle
+            shuffle=self.shuffle,
+            dynamicity=self.dynamicity
         )
 
         test_len = int(max(1, len(dataset) * self.test_size))
@@ -373,8 +375,7 @@ class DataGenerator():
                 y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
 
                 # filtering
-                sequence = np.concatenate((x[:, :, :, :3], y), axis=0)
-                score, valid = self.preprocessing.eval_datapoint(sequence, self.dynamicity)
+                score, valid = self.preprocessing.eval_datapoint(x[:, :, :, :3], y, self.dynamicity)
 
                 if valid:
                     loaded += 1

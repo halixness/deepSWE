@@ -43,6 +43,9 @@ class deepSWE(pl.LightningModule):
 
     # ------------------------------------------------
 
+    def sse_loss(self, input, target):
+        return torch.sum((target - input)**2)
+
     def mse_loss(self, input, target):
         return F.mse_loss(input, target, reduction='sum') # reduction='sum'
 
@@ -64,7 +67,7 @@ class deepSWE(pl.LightningModule):
         logits = self.forward(x, self.future_frames)
         logits = logits.permute(0, 2, 1, 3, 4)
 
-        loss = self.mse_loss(logits, y)
+        loss = self.sse_loss(logits, y)
         self.log('train_loss', loss)
 
         return loss
@@ -75,7 +78,7 @@ class deepSWE(pl.LightningModule):
         logits = self.forward(x, self.future_frames)
         logits = logits.permute(0, 2, 1, 3, 4)
 
-        loss = self.mse_loss(logits, y)
+        loss = self.sse_loss(logits, y)
         self.log('val_loss', loss)
 
 

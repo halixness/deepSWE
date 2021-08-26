@@ -42,24 +42,34 @@ class Preprocessing():
 
         return max_diff, max_diff >= threshold
 
-    def eval_datapoint_diff(self, seq, threshold):
-        ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
-            threshold = [0,1]
+    def eval_datapoint_diff(self, X, Y, threshold, grid_size=3):
+        ''' Returns false/true if the given sequence of frames is "sufficiently dynamic"
         '''
-        # compares the % difference between last and first frame
-        end_seq_mean = np.max(np.abs(seq[seq.shape[0]-1,:,:,0]))
+        center = int(X.shape[1]/grid_size)
+        start = center
+        end = 2*center
 
-        if end_seq_mean > 0:
-            score = np.max(np.abs(seq[seq.shape[0]-1,:,:,0] - seq[0,:,:,0]))/end_seq_mean
-            return score, end_seq_mean >= threshold 
-        else:
-            return end_seq_mean, False
+        # compares the % difference between last and first frame
+        first_frame = X[0, start:end, start:end, 0]
+
+        # Difference between first frame and any in the output
+        deltas = []
+        for frame in Y:
+            deltas.append(
+                np.sum(np.abs(frame[start:end, start:end, 0] - first_frame))
+            )
+
+        # Filtering
+        deltas = np.array(deltas)
+        deltas = deltas[deltas > threshold]
+
+        return deltas, deltas.shape[0] > 0
 
     
-    def eval_datapoint(self, seq, threshold=1e-1):
+    def eval_datapoint(self, X, Y, threshold=1e-1):
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
             threshold = [0,1]
         '''
-        return self.eval_datapoint_diff(seq, threshold)
+        return self.eval_datapoint_diff(X, Y, threshold)
         
 

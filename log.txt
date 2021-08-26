@@ -324,6 +324,12 @@ PyTorch             X                   X
 PyTorch OTF         X
 Lightning OTF       X
 
+
+======= 26/08/2021 =======
+
+- provare NSE Loss: https://en.wikipedia.org/wiki/Nash%E2%80%93Sutcliffe_model_efficiency_coefficient
+-
+
 ======= TODO =======
 Done    Priority    Task
 [ ]     1           Aumenta i frame passati, sperimenta autoregressiva e 1tomany
