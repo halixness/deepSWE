@@ -17,7 +17,7 @@ class EncoderDecoderConvLSTM(nn.Module):
         """
         self.encoder_1_convlstm = ConvLSTMCell(input_dim=in_chan,
                                                hidden_dim=nf,
-                                               kernel_size=(3, 3),
+                                               kernel_size=(5, 5),
                                                bias=True)
 
         self.encoder_2_convlstm = ConvLSTMCell(input_dim=nf,
@@ -32,7 +32,7 @@ class EncoderDecoderConvLSTM(nn.Module):
 
         self.decoder_2_convlstm = ConvLSTMCell(input_dim=nf,
                                                hidden_dim=nf,
-                                               kernel_size=(3, 3),
+                                               kernel_size=(5, 5),
                                                bias=True)
 
         self.decoder_CNN = nn.Conv3d(in_channels=nf,

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from models.ae.NFLSTMCell import NFLSTMCell
+from models.experiments.nfnets.NFLSTMCell import NFLSTMCell
 
 class EncoderDecoderConvLSTM(nn.Module):
     def __init__(self, nf, in_chan):

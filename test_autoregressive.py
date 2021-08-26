@@ -10,7 +10,7 @@ import matplotlib as mat
 import torch as th
 from torch.autograd import Variable
 
-from models.ae import seq2seq_NFLSTM
+from models.experiments.nfnets import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
 import argparse

@@ -12,12 +12,9 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
-import time
 
-from models.ae import seq2seq_NFLSTM
+from models.experiments.nfnets import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
-
-from threading import Thread
 
 mat.use("Agg") # headless mode
 
@@ -55,14 +52,8 @@ parser.add_argument('-save', dest="save_dataset", default = False, type=str2bool
                     help='Save the dataset loaded from disk to a npy file')
 parser.add_argument('-network', dest="network", default = "conv",
                     help='Network type: conv/nfnet/(...)')
-parser.add_argument('-test_size', dest='test_size', default = 0.2,
-                    help='Test size for the split')
-parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
-                    help='Shuffle the dataset')
 parser.add_argument('-tf', dest='test_flight',
                     help='Test flight. Avoids creating a train folder for this session.')
-parser.add_argument('-npy', dest='numpy_file',
-                    help='path to a npy stored dataset')
 parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
@@ -77,18 +68,14 @@ parser.add_argument('-b', dest='batch_size', default=4, type=int,
                     help='batch size') 
 parser.add_argument('-d', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
-parser.add_argument('-bs', dest='buffer_size', default=1e4, type=float,
+parser.add_argument('-buffer_size', dest='buffer_size', default=1e4, type=float,
                     help='size of the cache memory (in entries)')
-parser.add_argument('-t', dest='buffer_memory', default=1000, type=int,
+parser.add_argument('-buffer_memory', dest='buffer_memory', default=1000, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
-parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
-                    const=True, help='enable 2x downsampling (with gaussian filter)')  
 parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
                     help='learning rate')                                              
 parser.add_argument('-epochs', dest='epochs', default=100, type=int,
                     help='training iterations')
-parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
-                    help='latent size for the VAE')
 parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
@@ -101,16 +88,16 @@ parser.add_argument('-checkpoint', dest='checkpoint', default=0.1, type=float,
 
 args = parser.parse_args()
 
-if args.root is None and args.numpy_file is None:
+if args.root is None:
     print("required: please specify a root path: -r /path")
     exit()
    
 # -------------- Setting up the run
 
 if args.test_flight is None:
-    num_run = len(os.listdir("runs/")) + 1
+    num_run = len(os.listdir("../runs/")) + 1
     now = datetime.now()
-    foldername = "train_otf_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+    foldername = "train_otf_1tomany_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
     os.mkdir("runs/" + foldername)
 
 # -------------------------------
@@ -186,50 +173,22 @@ k = 0
 checkpoint = int(args.checkpoint * len(random_accesses))
 print("[~] Network weights will be saved each {} samples".format(checkpoint))
 
-results = []
-def get_datapoint(access, check=False):
-    results.append(
-        dataset.get_datapoint(access[0], access[1], check=check)
-    )
-    print("done")
-
 # Training loop
 for epoch in range(epochs):  # loop over the dataset multiple times
-
-    i = 0
-    while i < len(random_accesses):
-        
-        threads = []
-
-        # Start x parallel threads
-        for x in range(2):
-            access = random_accesses[i] 
-            process = Thread(target=get_datapoint, args=(access,))
-            threads.append(process)
-            process.start()
-            i += 1
-            print("Started thread {}...".format(x))
-
-        # Waiting for each to end
-        print("waiting threads...")
-        start = time.time()
-        for process in threads:
-            process.join()
-        end = time.time()
-        print("load time: {}".format(end - start))
-
-        print(len(results))
-        raise KeyboardInterrupt
-
-
     for i, access in enumerate(random_accesses):
 
         # Checkpoint weights saving
         if i % checkpoint == 0:
             weights_path = "runs/" + foldername + "/epoch_{}_chk_{}.weights".format(epoch, i)
             th.save(net.state_dict(), weights_path)
-
-        
+            
+            # Loss plot
+            mpl.rcParams['text.color'] = 'k'
+            plt.title("average loss")
+            plt.plot(range(len(losses)), losses)
+            if args.test_flight is None:
+                plt.savefig("runs/" + foldername + "/loss_{}_chk_{}.png".format(epoch, i))
+            plt.clf()
         
         # False mark -> invalid datapoint
         if access[2] != False:
@@ -259,15 +218,13 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                     optimizer.zero_grad()
 
                     # ---- Predicting
-                    outputs = net(X, 1) # 0 for layer index, 0 for h index
+                    outputs = net(X, args.future_frames) # 0 for layer index, 0 for h index
 
                     # ---- Batch Loss
-                    xstart=256
-                    xend=xstart+256
-                    ystart=256
-                    yend=ystart+256
-                    
-                    loss = criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
+                    outputs = outputs.permute(0, 2, 1, 3, 4) 
+
+                    center = int(outputs.shape[4]/2) # center square
+                    loss = criterion(outputs[:, :, :, center:(2*center), center:(2*center)], Y[:, :, :, center:(2*center), center:(2*center)])
 
                     loss.backward()
                     optimizer.step()

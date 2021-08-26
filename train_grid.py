@@ -4,43 +4,29 @@
 # In[20]:
 
 
-from utils.data_legacy.dataloader import DataLoader, DataPartitions, DataGenerator
+from utils.data_lightning.preloading import SWEDataModule
 import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
-import matplotlib.patches as patches
 
 import argparse
 
 import torch as th
-import torch.nn as nn
 import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
 import time
 
-from models.ae import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
 mat.use("Agg") # headless mode
 
 # -------------- Functions
 
-def mass_conservation_loss(output, target):
-    # output: b, h, w
-    diff = 0
-    for i,datapoint in enumerate(output):
-        diff += th.abs(
-            th.sum(
-                th.abs(output[i])
-            ) -
-            th.sum(
-                th.abs(target[i])
-            )
-        )
-    return diff**(1/2)
+def sse_loss(input, target):
+    return th.sum((target - input) ** 2)
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -56,65 +42,47 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
-parser.add_argument('-save', dest="save_dataset", default = False, type=str2bool,
-                    help='Save the dataset loaded from disk to a npy file')
-parser.add_argument('-network', dest="network", default = "conv",
-                    help='Network type: conv/nfnet/(...)')
-parser.add_argument('-test_size', dest='test_size', default = 0.2,
+parser.add_argument('-test_size', dest='test_size', default = 0,
+                    help='Test size for the split')
+parser.add_argument('-val_size', dest='val_size', default = 0,
                     help='Test size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
                     help='Shuffle the dataset')
-parser.add_argument('-tf', dest='test_flight',
-                    help='Test flight. Avoids creating a train folder for this session.')
-parser.add_argument('-npy', dest='numpy_file',
-                    help='path to a npy stored dataset')
-parser.add_argument('-r', dest='root',
+parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
-parser.add_argument('-p', dest='past_frames', default=4, type=int,
-                    help='number of past frames')       
-parser.add_argument('-f', dest='future_frames', default=1, type=int, 
-                    help='number of future frames')       
-parser.add_argument('-s', dest='partial', default=None, type=float,
-                    help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
-parser.add_argument('-i', dest='image_size', default=256, type=int,
-                    help='image size (width = height)')
-parser.add_argument('-b', dest='batch_size', default=4, type=int,
-                    help='batch size') 
-parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
-                    help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
-parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
-                    help='size of the cache memory (in entries)')
-parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
-                    help='temporal length of the cache memory (in iterations)')                                                                                                  
-parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
-                    const=True, help='enable 2x downsampling (with gaussian filter)')  
+parser.add_argument('-past_frames', dest='past_frames', default=4, type=int,
+                    help='number of past frames')
+parser.add_argument('-future_frames', dest='future_frames', default=1, type=int,
+                    help='number of future frames')
+parser.add_argument('-partial', dest='partial', default=None, type=float,
+                    help='percentage of portion of dataset (to load partial, lighter chunks)')
+parser.add_argument('-filters', dest='filters', default=16, type=int,
+                    help='Number of network kernels in hidden layers')
+parser.add_argument('-image_size', dest='image_size', default=256, type=int,
+                    help='Width=height of image')
+parser.add_argument('-batch_size', dest='batch_size', default=4, type=int,
+                    help='Batch size')
 parser.add_argument('-lr', dest='learning_rate', default=0.0001, type=float,
                     help='learning rate')                                              
-parser.add_argument('-epochs', dest='epochs', default=100, type=int,
+parser.add_argument('-epochs', dest='epochs', default=200, type=int,
                     help='training iterations')
-parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
-                    help='latent size for the VAE')
-parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
-                    help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
-parser.add_argument('-out_channels', dest='out_channels', default=1, type=int,
+parser.add_argument('-out_channels', dest='out_channels', default=3, type=int,
                     help='number of input channels')
-
+parser.add_argument('-filtering', dest='filtering', default=True, type=str2bool,
+                    help='Enable filtering dynamic sequences only')
+parser.add_argument('-workers', dest='workers', default=4, type=int,
+                    help='Dataloader threads')
 
 args = parser.parse_args()
-
-if args.root is None and args.numpy_file is None:
-    print("required: please specify a root path: -r /path")
-    exit()
    
 # -------------- Setting up the run
 
-if args.test_flight is None:
-    num_run = len(os.listdir("runs/")) + 1
-    now = datetime.now()
-    foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
-    os.mkdir("runs/" + foldername)
+num_run = len(os.listdir("runs/")) + 1
+now = datetime.now()
+foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+os.mkdir("runs/" + foldername)
 
 # -------------------------------
 if th.cuda.is_available():  
@@ -125,32 +93,25 @@ device = th.device(dev)
 
 plotsize = 15
 
-dataset = DataLoader(
-    root=args.root, 
-    numpy_file=args.numpy_file, 
-    past_frames=args.past_frames, 
-    future_frames=args.future_frames, 
-    image_size=args.image_size, 
-    batch_size=args.batch_size, 
-    buffer_size=args.buffer_size, 
-    buffer_memory=args.buffer_memory, 
-    dynamicity=args.dynamicity, 
-    partial=args.partial, 
-    test_size=args.test_size, 
-    clipping_threshold=1e5, 
-    shuffle=args.shuffle,
-    device=device
+dataset = SWEDataModule(
+    root=args.root,
+    test_size=args.test_size,
+    val_size=args.val_size,
+    past_frames=args.past_frames,
+    future_frames=args.future_frames,
+    partial=args.partial,
+    filtering=args.filtering,
+    batch_size=args.batch_size,
+    workers=args.workers,
+    image_size=args.image_size,
+    shuffle=False,
+    dynamicity=100,
+    caching=False
 )
+dataset.prepare_data()
 
 # ---- Model
-if args.network == "conv":
-    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
-elif args.network == "nfnet":
-    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device)
-else:
-    raise Exception("Unkown network type given.")
-
-criterion = nn.MSELoss(reduction='sum') # reduction='sum'
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.filters, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
 # ---- Training time!
@@ -161,31 +122,25 @@ test_errors = []
 training_times = []
 print("\n[!] It's training time!")
 
-X_train, y_train = dataset.get_train()
-X_test, y_test = dataset.get_test()
-
-# Stores the dataset on disk for faster loading
-#if args.save_dataset is not None and is not False:
-#    dataset.save_dataset("runs/" + foldername + "/dataset.npy")
-
 epochs = args.epochs
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
     print("---- Epoch {}".format(epoch))
-    for i, batch in enumerate(X_train):
+    for x,y in dataset.train_dataloader():
 
         optimizer.zero_grad()
+
+        x = x.float().to(device)
+        y = y.float().to(device)
 
         # ---- Predicting
 
         start = time.time()
-        outputs = net(batch, args.future_frames)  # 0 for layer index, 0 for h index
+        outputs = net(x, args.future_frames)  # 0 for layer index, 0 for h index
 
         # ---- Batch Loss
-        # central square only 
-        #loss = criterion(outputs[:, :args.out_channels, 0, 256:512, 256:512], y_train[i, :, 0, :args.out_channels, 256:512, 256:512])
-        loss = criterion(outputs[:, :args.out_channels, 0, :, :], y_train[i, :, 0, :args.out_channels, :, :])  
+        loss = sse_loss(outputs[:, :args.out_channels, 0, :, :], y[:, 0, :args.out_channels, :, :])
  
         loss.backward()
         optimizer.step()
@@ -195,10 +150,10 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         losses.append(loss.item())
 
-        if i == 0: 
-            print("batch {} - avg.loss {}".format(i, np.mean(losses)))
-            avg_losses.append(np.mean(losses))
+    print("epoch {} - avg.loss {}".format(epoch, np.mean(losses)))
+    avg_losses.append(np.mean(losses))
 
+    '''
     if epoch % 2 == 0:
 
         k = np.random.randint(len(X_test))
@@ -247,6 +202,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         #    print('[%d, %5d] loss: %.3f' %
         #          (epoch + 1, i + 1, running_loss / 2000))
         #    running_loss = 0.0
+    '''
 
 end = time.time()
 print(end - start)

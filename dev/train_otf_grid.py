@@ -1,10 +1,4 @@
-
-# coding: utf-8
-
-# In[20]:
-
-
-from utils.data_legacy.dataloader import DataLoader
+from utils.data_legacy.dataloader import DataPartitions, DataGenerator
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -18,9 +12,8 @@ import os
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
-import time
 
-from models.ae import seq2seq_NFLSTM
+from models.experiments.nfnets import seq2seq_NFLSTM
 from models.ae import seq2seq_ConvLSTM
 
 mat.use("Agg") # headless mode
@@ -67,23 +60,23 @@ parser.add_argument('-tf', dest='test_flight',
                     help='Test flight. Avoids creating a train folder for this session.')
 parser.add_argument('-npy', dest='numpy_file',
                     help='path to a npy stored dataset')
-parser.add_argument('-r', dest='root',
+parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
 parser.add_argument('-f', dest='future_frames', default=1, type=int, 
                     help='number of future frames')       
-parser.add_argument('-s', dest='partial', default=None, type=float,
+parser.add_argument('-partial', dest='partial', default=None, type=float,
                     help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
-parser.add_argument('-i', dest='image_size', default=256, type=int,
+parser.add_argument('-image_size', dest='image_size', default=256, type=int,
                     help='image size (width = height)')
 parser.add_argument('-b', dest='batch_size', default=4, type=int,
                     help='batch size') 
-parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
+parser.add_argument('-d', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
-parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
+parser.add_argument('-buffer_size', dest='buffer_size', default=1e4, type=float,
                     help='size of the cache memory (in entries)')
-parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
+parser.add_argument('-buffer_memory', dest='buffer_memory', default=1000, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
 parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
                     const=True, help='enable 2x downsampling (with gaussian filter)')  
@@ -97,6 +90,11 @@ parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
+parser.add_argument('-out_channels', dest='out_channels', default=1, type=int,
+                    help='number of input channels')
+parser.add_argument('-checkpoint', dest='checkpoint', default=0.1, type=float,
+                    help='Percentage of dataset at which saving the network weights')
+
 
 args = parser.parse_args()
 
@@ -107,9 +105,9 @@ if args.root is None and args.numpy_file is None:
 # -------------- Setting up the run
 
 if args.test_flight is None:
-    num_run = len(os.listdir("runs/")) + 1
+    num_run = len(os.listdir("../runs/")) + 1
     now = datetime.now()
-    foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+    foldername = "train_otf_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
     os.mkdir("runs/" + foldername)
 
 # -------------------------------
@@ -121,28 +119,31 @@ device = th.device(dev)
 
 plotsize = 15
 
-dataset = DataLoader(
-    root=args.root, 
-    numpy_file=args.numpy_file, 
+partitions = DataPartitions(
     past_frames=args.past_frames, 
     future_frames=args.future_frames, 
-    image_size=args.image_size, 
-    batch_size=args.batch_size, 
-    buffer_size=args.buffer_size, 
-    buffer_memory=args.buffer_memory, 
-    dynamicity=args.dynamicity, 
-    partial=args.partial, 
-    test_size=args.test_size, 
-    clipping_threshold=1e5, 
-    shuffle=args.shuffle,
-    device=device
+    root=args.root, 
+)
+
+dataset = DataGenerator(
+    root=args.root, 
+    dataset_partitions=partitions.get_partitions(),
+    past_frames=partitions.past_frames, 
+    future_frames=partitions.future_frames,
+    input_dim=(partitions.past_frames, args.image_size, args.image_size, 4),
+    output_dim=(partitions.future_frames, args.image_size, args.image_size, 3),
+    batch_size=args.batch_size,
+    buffer_size=args.buffer_size,
+    buffer_memory=args.buffer_memory,
+    downsampling=False,
+    dynamicity = args.dynamicity
 )
 
 # ---- Model
 if args.network == "conv":
-    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device) # False: many to one
+    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
 elif args.network == "nfnet":
-    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.hidden_layers).to(device)
+    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device)
 else:
     raise Exception("Unkown network type given.")
 
@@ -157,87 +158,107 @@ test_errors = []
 training_times = []
 print("\n[!] It's training time!")
 
-X_train, y_train = dataset.get_train()
-X_test, y_test = dataset.get_test()
-
-# Stores the dataset on disk for faster loading
-if args.save_dataset is not None:
-    dataset.save_dataset("runs/" + foldername + "/dataset.npy")
-
 epochs = args.epochs
 
+parts = partitions.get_partitions()
+
+# Random indexes
+random_accesses = []
+for i, area in enumerate(parts):
+
+    # random shuffle within the area only
+    sequences = area[1]
+    np.random.shuffle(sequences)
+    
+    for j, sequence in enumerate(sequences):
+        random_accesses.append([i, sequence, None])
+
+print("[~] Virtually shuffled the dataset, total sequences: {}".format(len(random_accesses)))
+
+# Initializing batches
+batch_x = np.empty((args.batch_size, args.past_frames, args.image_size, args.image_size, args.in_channels))
+batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
+k = 0
+
+checkpoint = int(args.checkpoint * len(random_accesses))
+print("[~] Network weights will be saved each {} samples".format(checkpoint))
+
+# Training loop
 for epoch in range(epochs):  # loop over the dataset multiple times
+    for i, access in enumerate(random_accesses):
 
-    print("---- Epoch {}".format(epoch))
-    for i, batch in enumerate(X_train):
-
-        optimizer.zero_grad()
-
-        # ---- Predicting
-
-        start = time.time()
-        outputs = net(batch, 1)  # 0 for layer index, 0 for h index
-
-        # ---- Batch Loss
-        loss = criterion(outputs[:, 0, :, :], y_train[i, :, 0, 0, :, :])
-
-        loss.backward()
-        optimizer.step()
-
-        end = time.time()
-        training_times.append(end - start)
-
-        losses.append(loss.item())
-
-        if i == 0: 
-            print("batch {} - avg.loss {}".format(i, np.mean(losses)))
-            avg_losses.append(np.mean(losses))
-
-    if epoch % 2 == 0:
-
-        k = np.random.randint(len(X_test))
-
-        outputs = net(X_test[k], 1)  # 0 for layer index, 0 for h index
-
-        #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
-        #print("test loss: {}".format(test_loss.item()))
-
-        #------------------------------
-        fig, axs = plt.subplots(1, X_test.shape[2] + 2, figsize=(plotsize, plotsize))
-
-        for ax in axs:
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-
-        # pick random datapoint from batch
-        x = np.random.randint(X_test[k].shape[0])
-
-        for i, frame in enumerate(X_test[k, x]):
-            axs[i].title.set_text('t={}'.format(i))
-            axs[i].matshow(frame[0].cpu().detach().numpy())
-
-        axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
-        axs[i+1].title.set_text('Predicted')
-
-        axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
-        axs[i+2].title.set_text('Ground Truth')
-
-        plt.show()
-
-        if args.test_flight is None:
-            plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
+        # Checkpoint weights saving
+        if i % checkpoint == 0:
+            weights_path = "runs/" + foldername + "/epoch_{}_chk_{}.weights".format(epoch, i)
+            th.save(net.state_dict(), weights_path)
+            
+            # Loss plot
+            mpl.rcParams['text.color'] = 'k'
+            plt.title("average loss")
+            plt.plot(range(len(losses)), losses)
+            if args.test_flight is None:
+                plt.savefig("runs/" + foldername + "/loss_{}_chk_{}.png".format(epoch, i))
+            plt.clf()
         
-        plt.clf()
-        
-        #------------------------------
+        # False mark -> invalid datapoint
+        if access[2] != False:
+            
+            # True mark -> already checked, valid datapoint
+            if access[2] == True: check = False
+            else: check = True
+    
+            #start = time.time()
+            datapoint = dataset.get_datapoint(access[0], access[1], check=check)
+            #end = time.time()
+            #print("load time: {}".format(end - start))
 
-        #if epoch % 10 == 0:
-        #    print('[%d, %5d] loss: %.3f' %
-        #          (epoch + 1, i + 1, running_loss / 2000))
-        #    running_loss = 0.0
+            # If the sequence is invalid -> mark it
+            if datapoint == None:
+                random_accesses[i][2] = False
+                print("=", end="", flush=True)
 
-end = time.time()
-print(end - start)
+            # Sequence valid
+            else:
+                # Forward pass and empty the batch               
+                if k >= args.batch_size:
+
+                    # b, s, t, h, w, c -> b, s, t, c, h, w
+                    X = th.Tensor(batch_x).to(device)
+                    Y = th.Tensor(batch_y).to(device)
+                    X = X.permute(0, 1, 4, 2, 3)
+                    Y = Y.permute(0, 1, 4, 2, 3)
+
+                    optimizer.zero_grad()
+
+                    # ---- Predicting
+                    outputs = net(X, 1) # 0 for layer index, 0 for h index
+
+                    # ---- Batch Loss
+                    xstart=256
+                    xend=xstart+256
+                    ystart=256
+                    yend=ystart+256
+                    
+                    loss = criterion(outputs[0,:,0,ystart:yend,xstart:xend], Y[0,0,:,ystart:yend,xstart:xend]) 
+
+                    loss.backward()
+                    optimizer.step()
+
+                    # print statistics
+                    losses.append(loss.item())
+                    batch_x = np.empty((args.batch_size, args.past_frames, args.image_size, args.image_size, args.in_channels))
+                    batch_y = np.empty((args.batch_size, args.future_frames, args.image_size, args.image_size, args.out_channels))
+                    k = 0
+
+                    print("-- avg.loss: {}".format(np.mean(losses)), flush=True)
+
+                # Accumulates datapoints in batch 
+                X, Y = datapoint
+                batch_x[k] = X
+                batch_y[k] = Y
+                k += 1
+
+                print("x", end="", flush=True)
 
 print('[!] Finished Training, storing weights...')
 if args.test_flight is None:
