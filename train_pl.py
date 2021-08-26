@@ -43,6 +43,8 @@ parser.add_argument('-workers', dest='workers', default=4, type=int,
                     help='Number of cpu threads for the data loader')
 parser.add_argument('-filtering', dest='filtering', default=False, type=str2bool,
                     help='Apply sequence dynamicity filtering')
+parser.add_argument('-gpus', dest='gpus', default=1, type=int,
+                    help='Number of GPUs')
 
 args = parser.parse_args()
 
@@ -81,7 +83,7 @@ model = deepSWE(
 logger = TensorBoardLogger("tb_logs", name="deepSWE")
 
 trainer = pl.Trainer(
-    gpus=1,
+    gpus=args.gpus,
     logger=logger,
     log_every_n_steps=1,
     precision=64,

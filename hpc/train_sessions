@@ -1,21 +1,7 @@
-job_id		epochs		dataset portion		result		img_size	frames		hidden
-1506091		100		0.25			OOM		256		4-1
-1506096		100		0.5			OOM		256		4-1
-1506097		100		0.7			OOM		256		4-1
-1506159		100		0.1			SUCCESS		768		4-1
-1506160		100		0.2			SUCCESS		768		4-1
-1506162		100		0.5			CUDA OOM	768		4-1
-1506234		100		0.3			OOM		768		4-1
-1506235		500		0.3			OOM		768		4-1
-1506282		500		0.2			SUCCESS		768		4-1
-1506283		500		0.2			SUCCESS		768		6-1
-1508185		200		0.3					768		4-1		16
-1508186		200		0.3					768		4-4		16
-1508188		200		0.3					768		8-1		16
-############
+id		    zone		img	    past	future		size	RAM	    used    result      epochs
+1508510		baganza		256	    4	    4		    20%	    64	    70      TIME EXC    40/200
+1508538    	baganza		256	    4	    1		    50%	    64	            
 
-
-1508261		4 to 4		10%
-1508280		16 to 1		10%
-1508282		4 to 4		40%
-
+1508520		arda		768	    4	    1		    30%	    64	    OOM     OOM
+1508521		baganza		768	    4	    1		    30%	    64      OOM     OOM  
+1508534		baganza		768	    4	    4		    40%     160G

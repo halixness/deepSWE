@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=SWE_deepTraining
+#SBATCH --job-name=SWE_lighting_deepTraining
 #SBATCH --output=%x.o%j
 #SBATCH --error=%x.e%j
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:2
 #SBATCH --partition=gpu
-#SBATCH --mem=150G
-#SBATCH --time=23:00:00
+#SBATCH --mem=64G
+#SBATCH --time=6:00:00
 
 # al piu' 128gb di ram per gpu in media
 # con il comando 'seff' controllo efficienza memoria
@@ -18,4 +18,4 @@ source "$CONDA_PREFIX/etc/profile.d/conda.sh"
 conda activate swe-cv-lightning
 
 cd ..
-python -u train_pl.py -root ../datasets/arda/3_minutes_output_2021_08_11_1832/mini/ -partial 0.1
+python train_pl.py -root ../datasets/baganza_old/output_2021_07_04_2341/mini/ -past_frames 4 -future_frames 1 -partial 0.5 -filters 24 -image_size 256 -gpus 2
