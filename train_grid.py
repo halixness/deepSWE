@@ -4,7 +4,8 @@
 # In[20]:
 
 
-from utils.data_lightning.preloading import SWEDataModule
+from utils.data_lightning import preloading
+from utils.data_lightning import otf
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -75,6 +76,9 @@ parser.add_argument('-filtering', dest='filtering', default=True, type=str2bool,
 parser.add_argument('-workers', dest='workers', default=4, type=int,
                     help='Dataloader threads')
 
+parser.add_argument('-otf', dest='otf', default=False, type=str2bool,
+                    help='Use on the fly data loading')
+
 args = parser.parse_args()
    
 # -------------- Setting up the run
@@ -93,21 +97,39 @@ device = th.device(dev)
 
 plotsize = 15
 
-dataset = SWEDataModule(
-    root=args.root,
-    test_size=args.test_size,
-    val_size=args.val_size,
-    past_frames=args.past_frames,
-    future_frames=args.future_frames,
-    partial=args.partial,
-    filtering=args.filtering,
-    batch_size=args.batch_size,
-    workers=args.workers,
-    image_size=args.image_size,
-    shuffle=False,
-    dynamicity=100,
-    caching=False
-)
+if args.otf:
+    dataset = otf.SWEDataModule(
+        root=args.root,
+        test_size=args.test_size,
+        val_size=args.val_size,
+        past_frames=args.past_frames,
+        future_frames=args.future_frames,
+        partial=args.partial,
+        filtering=False,
+        batch_size=args.batch_size,
+        workers=args.workers,
+        image_size=args.image_size,
+        shuffle=False,
+        dynamicity=100,
+        caching=False
+    )
+else:
+    dataset = preloading.SWEDataModule(
+        root=args.root,
+        test_size=args.test_size,
+        val_size=args.val_size,
+        past_frames=args.past_frames,
+        future_frames=args.future_frames,
+        partial=args.partial,
+        filtering=args.filtering,
+        batch_size=args.batch_size,
+        workers=args.workers,
+        image_size=args.image_size,
+        shuffle=False,
+        dynamicity=100,
+        caching=False
+    )
+
 dataset.prepare_data()
 
 # ---- Model
@@ -119,17 +141,29 @@ losses = []
 avg_losses = []
 errors = []
 test_errors = []
-training_times = []
 print("\n[!] It's training time!")
 
 epochs = args.epochs
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
-    print("---- Epoch {}".format(epoch))
-    for x,y in dataset.train_dataloader():
+    print("---- Epoch {}\tbatches {}\tsequences {}".format(epoch, len(dataset.train_dataloader()), len(dataset.train_dataloader())*args.batch_size))
+    epoch_start = time.time()
+    training_times = []
+    query_times = []
+    query_start = time.time()
+
+    for batch in dataset.train_dataloader():
+        query_end = time.time()
+        query_times.append(query_end-query_start)
+
+        x, y = batch
 
         optimizer.zero_grad()
+
+        if args.otf: # otf batches have an extra useless dimension
+            x = x[:,0]
+            y = y[:,0]
 
         x = x.float().to(device)
         y = y.float().to(device)
@@ -141,7 +175,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         # ---- Batch Loss
         loss = sse_loss(outputs[:, :args.out_channels, 0, :, :], y[:, 0, :args.out_channels, :, :])
- 
+
         loss.backward()
         optimizer.step()
 
@@ -149,60 +183,13 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         training_times.append(end - start)
 
         losses.append(loss.item())
+        print(". ", end="", flush=True)
+        query_start = time.time()
 
-    print("epoch {} - avg.loss {}".format(epoch, np.mean(losses)))
+    epoch_end = time.time()
+    print("\nepoch {}\tavg.loss {:.2f}\ttook {:.2f} s\tavg. inference time {:.2f} s\tavg.query time/batch {:.2f} s"
+          .format(epoch, np.mean(losses), epoch_end-epoch_start, np.mean(training_times), np.mean(query_times)))
     avg_losses.append(np.mean(losses))
-
-    '''
-    if epoch % 2 == 0:
-
-        k = np.random.randint(len(X_test))
-
-        outputs = net(X_test[k], 1)  # 0 for layer index, 0 for h index
-
-        #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
-        #print("test loss: {}".format(test_loss.item()))
-
-        #------------------------------
-        fig, axs = plt.subplots(1, X_test.shape[2] + 2, figsize=(plotsize, plotsize))
-
-        for ax in axs:
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-
-        # pick random datapoint from batch
-        x = np.random.randint(X_test[k].shape[0])
-
-        for i, frame in enumerate(X_test[k, x]):
-            axs[i].title.set_text('t={}'.format(i))
-            axs[i].matshow(frame[0].cpu().detach().numpy())
-            rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
-            axs[i].add_patch(rect)
-
-        axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
-        rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
-        axs[i+1].add_patch(rect)
-        axs[i+1].title.set_text('Predicted')
-
-        axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
-        rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
-        axs[i+2].add_patch(rect)
-        axs[i+2].title.set_text('Ground Truth')
-
-        plt.show()
-
-        if args.test_flight is None:
-            plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
-        
-        plt.clf()
-        
-        #------------------------------
-
-        #if epoch % 10 == 0:
-        #    print('[%d, %5d] loss: %.3f' %
-        #          (epoch + 1, i + 1, running_loss / 2000))
-        #    running_loss = 0.0
-    '''
 
 end = time.time()
 print(end - start)
@@ -221,3 +208,55 @@ plt.savefig("runs/" + foldername + "/avg_loss.png")
 plt.clf()
 
 print("Avg.training time: {}".format(np.mean(training_times)))
+
+'''
+---- CUT OUT PLOTTING EACH EPOCH
+if epoch % 2 == 0:
+
+    k = np.random.randint(len(X_test))
+
+    outputs = net(X_test[k], 1)  # 0 for layer index, 0 for h index
+
+    #test_loss = criterion(outputs[0],  y_test[k,:,:,0,:,:])
+    #print("test loss: {}".format(test_loss.item()))
+
+    #------------------------------
+    fig, axs = plt.subplots(1, X_test.shape[2] + 2, figsize=(plotsize, plotsize))
+
+    for ax in axs:
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
+
+    # pick random datapoint from batch
+    x = np.random.randint(X_test[k].shape[0])
+
+    for i, frame in enumerate(X_test[k, x]):
+        axs[i].title.set_text('t={}'.format(i))
+        axs[i].matshow(frame[0].cpu().detach().numpy())
+        rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+        axs[i].add_patch(rect)
+
+    axs[i+1].matshow(outputs[x][0][0].cpu().detach().numpy())
+    rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+    axs[i+1].add_patch(rect)
+    axs[i+1].title.set_text('Predicted')
+
+    axs[i+2].matshow(y_test[k,x][0][0].cpu().detach().numpy())
+    rect = patches.Rectangle((256, 256), 256, 256, linewidth=1, edgecolor='r', facecolor='none')
+    axs[i+2].add_patch(rect)
+    axs[i+2].title.set_text('Ground Truth')
+
+    plt.show()
+
+    if args.test_flight is None:
+        plt.savefig("runs/" + foldername + "/{}_{}_plot.png".format(epoch, k))
+
+    plt.clf()
+
+    #------------------------------
+
+    #if epoch % 10 == 0:
+    #    print('[%d, %5d] loss: %.3f' %
+    #          (epoch + 1, i + 1, running_loss / 2000))
+    #    running_loss = 0.0
+'''
