@@ -1,6 +1,5 @@
 import numpy as np
 import os
-from tqdm import tqdm
 import math
 import cv2 as cv
 from utils.preprocessing import Preprocessing
@@ -250,7 +249,7 @@ class DataGenerator():
         print("[x] {} areas found".format(len(self.dataset_partitions)))
 
         # For each area
-        for area_index, area in tqdm(enumerate(self.dataset_partitions)):
+        for area_index, area in enumerate(self.dataset_partitions):
             # For each sequence
             loaded = 0
 

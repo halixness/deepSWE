@@ -1,6 +1,5 @@
 import numpy as np
 import os
-from tqdm import tqdm
 import math
 import cv2 as cv
 from utils.preprocessing import Preprocessing
