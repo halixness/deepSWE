@@ -107,6 +107,7 @@ class SWEDataset(Dataset):
             buffer_size=buffer_size,
             buffer_memory=buffer_memory,
             downsampling=False,
+            filtering=self.filtering,
             dynamicity=dynamicity,
             caching=caching
         )
@@ -196,7 +197,7 @@ class DataPartitions():
 # ------------------------------------------------------------------------------
 class DataGenerator():
     def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim, dynamicity,
-                 buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False, ):
+                 filtering=True, buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False):
         '''
             Data Generator
             Inputs:
@@ -229,6 +230,7 @@ class DataGenerator():
 
         self.preprocessing = Preprocessing()
         self.dynamicity = dynamicity
+        self.filtering = filtering
 
     def get_data(self):
         'Generates batches of datapoints'
@@ -381,7 +383,10 @@ class DataGenerator():
                 y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
 
                 # filtering
-                score, valid = self.preprocessing.eval_datapoint(x[:, :, :, :3], y, self.dynamicity)
+                if self.filtering:
+                    score, valid = self.preprocessing.eval_datapoint(x[:, :, :, :3], y, self.dynamicity)
+                else:
+                    valid = True
 
                 if valid:
                     loaded += 1

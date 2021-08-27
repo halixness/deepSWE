@@ -146,8 +146,9 @@ class SWEDataset(Dataset):
         else:
             X, Y = self.dataset.get_datapoint(i, j, check=False)
 
-        if X is not None: 
-            self.pushValid(i, j)
+        if X is not None:
+            if self.filtering:
+                self.pushValid(i, j)
 
             x = th.Tensor(X)
             y = th.Tensor(Y)
@@ -160,9 +161,6 @@ class SWEDataset(Dataset):
             return (x, y)
         else:
             return None
-
-    def to_npy(self, filename):
-        th.save(th.Tensor([self.X, self.Y]), filename)
            
 
 # ------------------------------------------------------------------------------
@@ -264,193 +262,7 @@ class DataGenerator():
         self.preprocessing = Preprocessing()
         self.dynamicity = dynamicity
 
-    def get_data(self):
-        'Generates batches of datapoints'
-        X, Y = self.__data_generation() # seq, t, h, w, c
-        ex_X = None
-        ex_Y = None
 
-        batch_residual = X.shape[0] % self.batch_size
-        n_batches = X.shape[0] // self.batch_size
-
-        # In case of n_sequences =/= k*batch_size
-        if batch_residual > 0:
-            X_b = X[:-batch_residual].reshape((n_batches, self.batch_size, *self.input_dim))
-            Y_b = Y[:-batch_residual].reshape((n_batches, self.batch_size, *self.output_dim))
-
-            # extra batch with n < batch_size
-            ex_X = np.array([[X[-batch_residual:]]])
-            ex_Y = np.array([[Y[-batch_residual:]]])
-
-        else:
-            X_b = X.reshape((n_batches, self.batch_size, *self.input_dim))
-            Y_b = Y.reshape((n_batches, self.batch_size, *self.output_dim))
-
-        return X_b, Y_b, (ex_X, ex_Y)
-
-
-    def __data_generation(self):
-        'Generates the raw sequence of datapoints (filtered)'
-
-        # stats
-        accesses = 0
-        hits = 0
-
-        # Initialization
-        X = None
-        Y = None
-
-        print("[x] {} areas found".format(len(self.dataset_partitions)))
-
-        # For each area
-        for area_index, area in enumerate(self.dataset_partitions):
-            # For each sequence
-            loaded = 0
-            for i, sequence in enumerate(area[1]):
-
-                # --- BTM
-                btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
-                if len(btm_filenames) == 0:
-                    raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-                btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0])
-
-                # --- Preprocessing
-                if self.downsampling:
-                    btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
-                    btm = cv.pyrDown(btm)
-
-                # riduzione valori il sottraendo minimo
-                min_btm = np.min(btm)
-                btm = btm - min_btm
-
-                btm.resize(btm.shape[0], btm.shape[1], 1)
-                btm_x = np.tile(btm, (self.past_frames, 1, 1, 1))
-
-                deps = None
-                vvx_s = None
-                vvy_s = None
-
-                framestart = int(sequence.replace("id-", ""))
-
-                # Starts from the right frame
-                print("sequence {} ".format(i), end='')
-                
-                for k in range(framestart, framestart + self.past_frames + self.future_frames):
-
-                    # id area -> id frame
-                    gid = "{}-{}-{}".format(area_index, sequence, k)
-
-                    # Parameters
-                    extensions = ["DEP", "VVX", "VVY"]
-                    matrices = []
-
-                    # Gets datapoint filename
-                    dep_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if
-                                    x.endswith(".DEP")]
-
-                    if len(dep_filenames) == 0:
-                        raise Exception("No DEP maps found for the area {}".format(self.dataset_partitions[area_index][0]))
-
-                    # asserting that all maps are named with the same prefix
-                    dep_filename = dep_filenames[0].split(".")[0][:-4]
-
-                    # 1 frame -> 3 matrices (3 extensions)
-                    for i, ext in enumerate(extensions):
-                        accesses += 1
-                        global_id = "{}-{}".format(i, gid)  # indice linearizzato globale
-
-                        cache = self.buffer_lookup(
-                            global_id
-                        )
-                        if cache is False:
-                            frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext))
-                            # --- On-spot Gaussian Blurring
-                            if self.downsampling:
-                                frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
-                                frame = cv.pyrDown(frame)
-                            # ----
-                            self.buffer_push(global_id, frame)
-                        else:
-                            frame = cache
-                            hits += 1
-                        matrices.append(frame)
-
-                    frame, vvx, vvy = matrices
-
-                    # ---
-
-                    if deps is None:
-                        deps = np.array([frame])
-                    else:
-                        deps = np.concatenate((deps, np.array([frame])))
-
-                    if vvx_s is None:
-                        vvx_s = np.array([vvx])
-                    else:
-                        vvx_s = np.concatenate((vvx_s, np.array([vvx])))
-
-                    if vvy_s is None:
-                        vvy_s = np.array([vvy])
-                    else:
-                        vvy_s = np.concatenate((vvy_s, np.array([vvy])))
-
-                # ---------
-
-                deps[deps > 10e5] = 0
-                vvx_s[vvx_s > 10e5] = 0
-                vvy_s[vvy_s > 10e5] = 0
-                btm_x[btm_x > 10e5] = 0
-
-                # --- X
-                x_dep = deps[:self.past_frames]
-                x_dep.resize((x_dep.shape[0], x_dep.shape[1], x_dep.shape[2], 1))
-
-                x_vx = vvx_s[:self.past_frames]
-                x_vx.resize((x_vx.shape[0], x_vx.shape[1], x_vx.shape[2], 1))
-
-                x_vy = vvy_s[:self.past_frames]
-                x_vy.resize((x_vy.shape[0], x_vy.shape[1], x_vy.shape[2], 1))
-
-                x = np.concatenate((x_dep, x_vx, x_vy, btm_x), axis=3)
-
-                # --- Y
-                y_dep = deps[self.past_frames:]
-                y_dep.resize((y_dep.shape[0], y_dep.shape[1], y_dep.shape[2], 1))
-
-                y_vx = vvx_s[self.past_frames:]
-                y_vx.resize((y_vx.shape[0], y_vx.shape[1], y_vx.shape[2], 1))
-
-                y_vy = vvy_s[self.past_frames:]
-                y_vy.resize((y_vy.shape[0], y_vy.shape[1], y_vy.shape[2], 1))
-
-                y = np.concatenate((y_dep, y_vx, y_vy), axis=3)
-
-                # filtering
-                score, valid = self.preprocessing.eval_datapoint(x[:,:,:,:3], y, self.dynamicity)
-
-                if valid:
-
-                    loaded += 1
-
-                    if X is None: X = np.expand_dims(x,0)
-                    else: X = np.concatenate((X, np.expand_dims(x,0)))
-
-                    if Y is None: Y = np.expand_dims(y,0)
-                    else: Y = np.concatenate((Y, np.expand_dims(y,0)))
-                
-                    print(" - valid ")
-                else:
-                    print(" - discarded ")
-
-            print("\n[{}%] {} valid sequences loaded".format(round((area_index+1)/len(self.dataset_partitions)*100), loaded))
-
-        # Buffer ratio calculation
-        if accesses != 0:
-            self.buffer_hit_ratio = self.buffer_hit_ratio * 0.5 + 0.5 * (hits / accesses)
-
-        return X, Y
-
-    
     def get_datapoint(self, area_index, sequence_index, check=True):  
         '''
             Generates a single datapoint on the fly (cached)
@@ -519,19 +331,26 @@ class DataGenerator():
                 
                 global_id = "{}-{}".format(i, gid)  # indice linearizzato globale
 
-                cache = self.buffer_lookup(
-                    global_id
-                )
-                if cache is False:
-                    frame = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename, k, ext), delimiter=" ")
-                    # --- On-spot Gaussian Blurring
-                    if self.downsampling:
-                        frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
-                        frame = cv.pyrDown(frame)
-                    # ----
-                    self.buffer_push(global_id, frame)
+                # ----- Cache
+                if self.caching:
+                    cache_frame = self.buffer_lookup(
+                        global_id
+                    )
+                    if cache_frame is False:
+                        frame = iter_loadtxt(
+                            self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
+                                                                                                       k, ext),
+                            delimiter=" ")
+                        self.buffer_push(global_id, frame)
+                    else:
+                        frame = cache_frame
+
+                # ----- No cache
                 else:
-                    frame = cache
+                    frame = iter_loadtxt(
+                        self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
+                                                                                                   k, ext),
+                        delimiter=" ")
 
                 matrices.append(frame)
 

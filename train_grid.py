@@ -79,6 +79,8 @@ parser.add_argument('-workers', dest='workers', default=4, type=int,
 
 parser.add_argument('-otf', dest='otf', default=False, type=str2bool,
                     help='Use on the fly data loading')
+parser.add_argument('-caching', dest='caching', default=False, type=str2bool,
+                    help='Use cache in dataloader')
 
 args = parser.parse_args()
    
@@ -89,6 +91,8 @@ now = datetime.now()
 foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
 os.mkdir("runs/" + foldername)
 weights_path = "runs/" + foldername + "/model.weights"
+
+print("[!] Dest folder: {}".format("runs/" + foldername))
 
 # -------------------------------
 plotsize = 15
@@ -107,7 +111,7 @@ if args.otf:
         image_size=args.image_size,
         shuffle=False,
         dynamicity=100,
-        caching=False
+        caching=args.caching
     )
 else:
     dataset = preloading.SWEDataModule(
@@ -123,7 +127,7 @@ else:
         image_size=args.image_size,
         shuffle=False,
         dynamicity=100,
-        caching=False
+        caching=args.caching
     )
 
 dataset.prepare_data()
