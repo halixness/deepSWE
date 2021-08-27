@@ -14,6 +14,7 @@ import matplotlib as mat
 import argparse
 
 import torch as th
+import torch.nn as nn
 import os
 from datetime import datetime
 import matplotlib as mpl
@@ -87,14 +88,9 @@ num_run = len(os.listdir("runs/")) + 1
 now = datetime.now()
 foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
 os.mkdir("runs/" + foldername)
+weights_path = "runs/" + foldername + "/model.weights"
 
 # -------------------------------
-if th.cuda.is_available():  
-    dev = "cuda:0" 
-else:  
-    dev = "cpu"  
-device = th.device(dev) 
-
 plotsize = 15
 
 if args.otf:
@@ -133,10 +129,23 @@ else:
 dataset.prepare_data()
 
 # ---- Model
-net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.filters, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
-optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.filters, in_chan=args.in_channels, out_chan=args.out_channels)
+
+# Parallelism
+if th.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = th.device(dev)
+
+if th.cuda.device_count() > 1:
+  print("[!] Yay! Using ", th.cuda.device_count(), "GPUs!")
+  net = nn.DataParallel(net)
+
+net.to(device)
 
 # ---- Training time!
+optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 losses = []
 avg_losses = []
 errors = []
@@ -191,13 +200,13 @@ for epoch in range(epochs):  # loop over the dataset multiple times
           .format(epoch, np.mean(losses), epoch_end-epoch_start, np.mean(training_times), np.mean(query_times)))
     avg_losses.append(np.mean(losses))
 
+    # checkpoint weights
+    th.save(net.state_dict(), weights_path)
+
 end = time.time()
 print(end - start)
 
-print('[!] Finished Training, storing weights...')
-
-weights_path = "runs/" + foldername + "/model.weights"
-th.save(net.state_dict(), weights_path)
+print('[!] Finished Training, storing final weights...')
 
 # Loss plot
 mpl.rcParams['text.color'] = 'k'
