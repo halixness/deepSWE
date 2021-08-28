@@ -27,7 +27,7 @@ def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
 
 class SWEDataModule(pl.LightningDataModule):
 
-    def __init__(self, root, past_frames, future_frames, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
+    def __init__(self, root, past_frames, future_frames, downsampling=False, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -43,6 +43,7 @@ class SWEDataModule(pl.LightningDataModule):
         self.shuffle = shuffle
         self.dynamicity = dynamicity
         self.caching = caching
+        self.downsampling = downsampling
 
     def prepare_data(self):
         dataset = SWEDataset(
@@ -54,7 +55,8 @@ class SWEDataModule(pl.LightningDataModule):
             image_size=self.image_size,
             shuffle=self.shuffle,
             dynamicity=self.dynamicity,
-            caching=self.caching
+            caching=self.caching,
+            downsampling=self.downsampling
         )
 
         test_len = int(max(1, len(dataset) * self.test_size))
@@ -80,13 +82,14 @@ class SWEDataModule(pl.LightningDataModule):
 
 class SWEDataset(Dataset):
     def __init__(self, past_frames, future_frames, root, dynamicity, shuffle=True, filtering=True, caching=False, numpy_file=None, image_size=256, batch_size=4,
-                 buffer_memory=100, buffer_size=1000, partial=None):
+                 buffer_memory=100, buffer_size=1000, partial=None, downsampling=False):
         ''' Initiates the dataloading process '''
 
         if root is None and numpy_file is None:
             raise Exception("Please specify either a root path or a numpy file: -r /path -npy /dataset.py")
 
         self.filtering = filtering
+        self.batch_size = batch_size
 
         self.partitions = DataPartitions(
             past_frames=past_frames,
@@ -106,7 +109,7 @@ class SWEDataset(Dataset):
             batch_size=batch_size,
             buffer_size=buffer_size,
             buffer_memory=buffer_memory,
-            downsampling=False,
+            downsampling=downsampling,
             filtering=self.filtering,
             dynamicity=dynamicity,
             caching=caching
@@ -265,7 +268,6 @@ class DataGenerator():
                     raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
                 btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
 
-
                 # --- Preprocessing
                 if self.downsampling:
                     btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
@@ -329,6 +331,11 @@ class DataGenerator():
                             frame = iter_loadtxt(
                                 self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
                                                                                                            k, ext), delimiter=" ")
+
+                        # --- On-spot Gaussian Blurring
+                        if self.downsampling:
+                            frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
+                            frame = cv.pyrDown(frame)
 
                         matrices.append(frame)
 

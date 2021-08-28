@@ -82,6 +82,8 @@ parser.add_argument('-otf', dest='otf', default=False, type=str2bool,
                     help='Use on the fly data loading')
 parser.add_argument('-caching', dest='caching', default=False, type=str2bool,
                     help='Use cache in dataloader')
+parser.add_argument('-downsampling', dest='downsampling', default=False, type=str2bool,
+                    help='Use 2xdownsampling')
 
 args = parser.parse_args()
    
@@ -112,8 +114,10 @@ if args.otf:
         image_size=args.image_size,
         shuffle=False,
         dynamicity=100,
-        caching=args.caching
+        caching=args.caching,
+        downsampling=args.downsampling
     )
+
 else:
     dataset = preloading.SWEDataModule(
         root=args.root,
@@ -128,10 +132,19 @@ else:
         image_size=args.image_size,
         shuffle=False,
         dynamicity=100,
-        caching=args.caching
+        caching=args.caching,
+        downsampling=args.downsampling
     )
 
 dataset.prepare_data()
+batches = len(dataset.train_dataloader())
+sequences = batches * args.batch_size
+seq_matrices = (args.past_frames * 4 + args.future_frames * 3)
+
+ram_db_size = (sequences * seq_matrices * (args.image_size**2) * 4) / (1024**3)
+batch_gbytes_size = (args.batch_size * (seq_matrices * (args.image_size**2) * 4)) / (1024**3)
+
+print("Dataset size:\n\t{} sequences\n\t{} batches\n\t{:.2f} GB RAM dataset size\n\t{:.2f} GB RAM batch size".format(sequences, batches, ram_db_size, batch_gbytes_size))
 
 # ---- Model
 net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.filters, in_chan=args.in_channels, out_chan=args.out_channels)
@@ -161,7 +174,7 @@ epochs = args.epochs
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
-    print("---- Epoch {}\tbatches {}\tsequences {}".format(epoch, len(dataset.train_dataloader()), len(dataset.train_dataloader())*args.batch_size))
+    print("---- Epoch {}".format(epoch))
     epoch_start = time.time()
     training_times = []
     query_times = []

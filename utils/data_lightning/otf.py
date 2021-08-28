@@ -28,7 +28,8 @@ def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
 
 class SWEDataModule(pl.LightningDataModule):
 
-    def __init__(self, root, past_frames, future_frames, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
+    def __init__(self, root, past_frames, future_frames, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4,
+                 downsampling=False, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -44,6 +45,7 @@ class SWEDataModule(pl.LightningDataModule):
         self.shuffle = shuffle
         self.dynamicity = dynamicity
         self.caching = caching
+        self.downsampling = downsampling
         
     def prepare_data(self):
 
@@ -56,12 +58,14 @@ class SWEDataModule(pl.LightningDataModule):
             image_size=self.image_size,
             shuffle=self.shuffle,
             dynamicity=self.dynamicity,
-            caching=self.caching
+            caching=self.caching,
+            downsampling=self.downsampling
         )
 
-        test_len = int(max(1, len(dataset) * self.test_size))
-        val_len = int(max(1, len(dataset) * self.val_size))
+        test_len = int(len(dataset) * self.test_size)
+        val_len = int(len(dataset) * self.val_size)
         train_len = len(dataset) - test_len - val_len
+
         datasets = random_split(dataset, [train_len, test_len, val_len])
 
         self.train_loader = DataLoader(datasets[0], batch_size=self.batch_size, num_workers=self.workers)
@@ -80,7 +84,8 @@ class SWEDataModule(pl.LightningDataModule):
 # ------------------------------------------------------------------------------
 
 class SWEDataset(Dataset):
-    def __init__(self, past_frames, future_frames, root, shuffle=True, caching=False, filtering=True, image_size=256, batch_size=4, dynamicity=1e-3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None, clipping_threshold=1e5, device="cpu"):
+    def __init__(self, past_frames, future_frames, root, shuffle=True, caching=False, filtering=True, image_size=256, batch_size=4, dynamicity=1e-3,
+                 buffer_memory=100, buffer_size=1000, downsampling=False, partial=None):
         ''' Initiates the dataloading process '''
 
         self.filtering = filtering
@@ -102,7 +107,7 @@ class SWEDataset(Dataset):
             batch_size=batch_size,
             buffer_size=buffer_size,
             buffer_memory=buffer_memory,
-            downsampling=False,
+            downsampling=downsampling,
             dynamicity=dynamicity,
             caching=caching
         )
@@ -347,6 +352,10 @@ class DataGenerator():
                 else:
                     frame = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,k, ext), ' ', header=None).values
 
+                # --- On-spot Gaussian Blurring
+                if self.downsampling:
+                    frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
+                    frame = cv.pyrDown(frame)
                 matrices.append(frame)
 
             frame, vvx, vvy = matrices
