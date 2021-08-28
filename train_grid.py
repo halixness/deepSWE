@@ -7,6 +7,7 @@
 from utils.data_lightning import preloading
 from utils.data_lightning import otf
 import numpy as np
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 import matplotlib as mat
@@ -146,7 +147,7 @@ if th.cuda.device_count() > 1:
   print("[!] Yay! Using ", th.cuda.device_count(), "GPUs!")
   net = nn.DataParallel(net)
 
-net.to(device)
+net = net.to(device)
 
 # ---- Training time!
 optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
@@ -166,7 +167,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
     query_times = []
     query_start = time.time()
 
-    for batch in dataset.train_dataloader():
+    iter_dataset = tqdm(dataset.train_dataloader())
+    for batch in iter_dataset:
         query_end = time.time()
         query_times.append(query_end-query_start)
 
@@ -196,11 +198,16 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         training_times.append(end - start)
 
         losses.append(loss.item())
-        print(". ", end="", flush=True)
         query_start = time.time()
 
+        iter_dataset.set_postfix(
+            loss=np.mean(losses),
+            fwd_time=np.mean(training_times),
+            query_time=np.mean(query_times)
+        )
+
     epoch_end = time.time()
-    print("\nepoch {}\tavg.loss {:.2f}\ttook {:.2f} s\tavg. inference time {:.2f} s\tavg.query time/batch {:.2f} s"
+    print("\navg.loss {:.2f}\ttook {:.2f} s\tavg. inference time {:.2f} s\tavg.query time/batch {:.2f} s"
           .format(epoch, np.mean(losses), epoch_end-epoch_start, np.mean(training_times), np.mean(query_times)))
     avg_losses.append(np.mean(losses))
 

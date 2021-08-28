@@ -112,7 +112,7 @@ net.load_state_dict(
     th.load(args.weights_path)
 )
 
-net.to(device)
+net = net.to(device)
 net.eval() # evaluation mode
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
