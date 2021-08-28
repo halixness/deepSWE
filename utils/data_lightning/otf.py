@@ -2,6 +2,7 @@ import numpy as np
 import os
 import math
 import cv2 as cv
+import pandas as pd
 from utils.preprocessing import Preprocessing
 
 import torch as th
@@ -286,7 +287,7 @@ class DataGenerator():
         btm_filenames = [x for x in os.listdir(self.root + self.dataset_partitions[area_index][0]) if x.endswith(".BTM")]
         if len(btm_filenames) == 0:
             raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
-        btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
+        btm = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0],' ',header=None).values
 
         # --- Preprocessing
         if self.downsampling:
@@ -337,20 +338,14 @@ class DataGenerator():
                         global_id
                     )
                     if cache_frame is False:
-                        frame = iter_loadtxt(
-                            self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
-                                                                                                       k, ext),
-                            delimiter=" ")
+                        frame = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,k, ext), ' ', header=None).values
                         self.buffer_push(global_id, frame)
                     else:
                         frame = cache_frame
 
                 # ----- No cache
                 else:
-                    frame = iter_loadtxt(
-                        self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
-                                                                                                   k, ext),
-                        delimiter=" ")
+                    frame = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,k, ext), ' ', header=None).values
 
                 matrices.append(frame)
 
