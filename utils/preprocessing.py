@@ -70,7 +70,6 @@ class Preprocessing():
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
             threshold = [0,1]
         '''
-        print(threshold)
         return self.eval_datapoint_diff(X, Y, threshold)
         
 

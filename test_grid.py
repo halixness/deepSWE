@@ -66,13 +66,13 @@ parser.add_argument('-image_size', dest='image_size', default=256, type=int,
                     help='image size (width = height)')
 parser.add_argument('-batch_size', dest='batch_size', default=4, type=int,
                     help='batch size')
+parser.add_argument('-dynamicity', dest='dynamicity', default=1e-1, type=float,
+                    help='dynamicity rate (to filter out "dynamic" sequences)')
 
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
 parser.add_argument('-f', dest='future_frames', default=1, type=int, 
                     help='number of future frames')
-parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
-                    help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
 parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
                     help='size of the cache memory (in entries)')
 parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
@@ -134,7 +134,7 @@ dataset = SWEDataset(
     past_frames=args.past_frames, 
     future_frames=args.future_frames, 
     partial=args.partial,
-    dynamicity=1e-1
+    dynamicity=args.dynamicity
 )
 
 for t in range(args.n_tests):
