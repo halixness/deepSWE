@@ -133,7 +133,8 @@ dataset = SWEDataset(
     root=args.root,  
     past_frames=args.past_frames, 
     future_frames=args.future_frames, 
-    partial=args.partial
+    partial=args.partial,
+    dynamicity=1e-1
 )
 
 for t in range(args.n_tests):
@@ -144,7 +145,7 @@ for t in range(args.n_tests):
     datapoint = dataset[i]
 
     while datapoint is None:
-        i = np.random.randint(len(dataset))       # random batch
+        i = np.random.randint(len(dataset))       # random sequence
         datapoint = dataset[i]
 
     print("\t data loaded!", flush=True)

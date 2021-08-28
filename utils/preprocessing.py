@@ -59,7 +59,8 @@ class Preprocessing():
             )
 
         # Filtering
-        deltas = np.array(deltas)
+        tot_sum = np.sum(np.abs(frame[start:end, start:end, 0]))
+        deltas = np.array(deltas)/tot_sum
         deltas = deltas[deltas > threshold]
 
         return deltas, deltas.shape[0] > 0
@@ -69,6 +70,7 @@ class Preprocessing():
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic" 
             threshold = [0,1]
         '''
+        print(threshold)
         return self.eval_datapoint_diff(X, Y, threshold)
         
 

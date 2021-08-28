@@ -197,7 +197,6 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         y = y.float().to(device)
 
         # ---- Predicting
-
         start = time.time()
         outputs = net(x, args.future_frames)  # 0 for layer index, 0 for h index
 
