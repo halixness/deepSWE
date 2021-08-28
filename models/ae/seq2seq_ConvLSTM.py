@@ -67,7 +67,7 @@ class EncoderDecoderConvLSTM(nn.Module):
         outputs = torch.stack(outputs, 1)
         outputs = outputs.permute(0, 2, 1, 3, 4)
         outputs = self.decoder_CNN(outputs)
-        outputs = torch.nn.LeakyReLU()(outputs)
+        outputs = torch.nn.ReLU()(outputs)
 
         return outputs
 
