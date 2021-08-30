@@ -8,6 +8,7 @@ import argparse
 import torch as th
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
+import random
 import os
 import sys
 from datetime import datetime
@@ -49,10 +50,12 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
-parser.add_argument('-test_size', dest='test_size', default = 0,
+parser.add_argument('-accuracy_threshold', dest='accuracy_threshold', default = 1e-1, type=float,
+                    help='Delta threshold to consider true positives, [0,1] ')
+parser.add_argument('-test_size', dest='test_size', default = 0, type=float,
                     help='Test size for the split')
-parser.add_argument('-val_size', dest='val_size', default = 0,
-                    help='Test size for the split')
+parser.add_argument('-val_size', dest='val_size', default = 0, type=float,
+                    help='Val size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
                     help='Shuffle the dataset')
 parser.add_argument('-root', dest='root',
@@ -220,7 +223,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         # ---- Batch Loss
         loss = rss_loss(outputs[:, :args.out_channels, 0, center:2*center, center:2*center], y[:, 0, :args.out_channels, center:2*center, center:2*center])
-        acc = accuracy(outputs[:, :args.out_channels, 0, center:2*center, center:2*center], y[:, 0, :args.out_channels, center:2*center, center:2*center], threshold=1e-3)
+        acc = accuracy(outputs[:, :args.out_channels, 0, center:2*center, center:2*center], y[:, 0, :args.out_channels, center:2*center, center:2*center], threshold=args.accuracy_threshold)
 
         loss.backward()
         optimizer.step()
@@ -231,21 +234,38 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         losses.append(loss.item())
         query_start = time.time()
 
-        iter_dataset.set_postfix(
-            loss=np.mean(losses),
-            accuracy=acc,
-            fwd_time=np.mean(training_times),
-            query_time=np.mean(query_times)
-        )
+        # ----- Testing
+        if args.test_size > 0:
+            size = len(dataset.datasets[1])
+            random_test_batch = dataset.datasets[1][random.randint(0, size - 1)]
+            x_test, y_test = batch
+            x_test = x_test.float().to(device)
+            y_test = y_test.float().to(device)
+            test_outputs = net(x_test, 1)
+            test_acc = accuracy(test_outputs[:, :3, 0, :, :], y_test[:, 0, :3, :, :], threshold=args.accuracy_threshold)
 
-        writer.add_scalar('accuracy',
-                          acc,
-                          epoch*len(dataset.train_dataloader())+i)
+            writer.add_scalars('accuracy', {'train': acc,
+                                            'test': test_acc,
+                                            }, epoch * len(dataset.train_dataloader()) + i)
+        else:
+            test_acc = 0
+            writer.add_scalar('train_accuracy',
+                              acc,
+                              epoch * len(dataset.train_dataloader()) + i)
 
-        if i % int(len(dataset.train_dataloader())*0.1) == 0:
+        # Plot values
+        if i % 3:
             writer.add_scalar('avg training loss',
                               np.mean(losses),
                               epoch)
+
+        iter_dataset.set_postfix(
+            loss=np.mean(losses),
+            train_acc=acc,
+            test_acc=test_acc,
+            fwd_time=np.mean(training_times),
+            query_time=np.mean(query_times)
+        )
 
     epoch_end = time.time()
     print("\navg.loss {:.2f}\ttook {:.2f} s\tavg. inference time {:.2f} s\tavg.query time/batch {:.2f} s"

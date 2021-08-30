@@ -63,11 +63,11 @@ class SWEDataModule(pl.LightningDataModule):
         val_len = int(len(dataset) * self.val_size)
         train_len = len(dataset) - test_len - val_len
 
-        datasets = random_split(dataset, [train_len, test_len, val_len])
+        self.datasets = random_split(dataset, [train_len, test_len, val_len])
 
-        self.train_loader = DataLoader(datasets[0], batch_size=self.batch_size, num_workers=self.workers)
-        self.test_loader = DataLoader(datasets[1], batch_size=self.batch_size, num_workers=self.workers)
-        self.val_loader = DataLoader(datasets[2], batch_size=self.batch_size, num_workers=self.workers)
+        self.train_loader = DataLoader(self.datasets[0], batch_size=self.batch_size, num_workers=self.workers)
+        self.test_loader = DataLoader(self.datasets[1], batch_size=self.batch_size, num_workers=self.workers)
+        self.val_loader = DataLoader(self.datasets[2], batch_size=self.batch_size, num_workers=self.workers)
 
     def train_dataloader(self):
         return self.train_loader
