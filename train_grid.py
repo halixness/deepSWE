@@ -1,34 +1,38 @@
-
-# coding: utf-8
-
-# In[20]:
-
-
 from utils.data_lightning import preloading
 from utils.data_lightning import otf
 import numpy as np
 from tqdm import tqdm
-
 import matplotlib.pyplot as plt
 import matplotlib as mat
-
 import argparse
-
 import torch as th
 import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 import os
+import sys
 from datetime import datetime
 import matplotlib as mpl
 import torch.optim as optim
 import time
-
 from models.ae import seq2seq_ConvLSTM
 
 mat.use("Agg") # headless mode
 
 # -------------- Functions
 
-def sse_loss(input, target):
+def accuracy(prediction, target, threshold = 1e-2):
+
+    total = (target * prediction).cpu().detach().numpy()
+    total = np.array(total > 0).astype(int) # TP + TN + FP + FN
+
+    diff = np.abs((target - prediction).cpu().detach().numpy())
+    correct_cells = (diff < threshold).astype(int)
+    correct_cells = correct_cells*total # TP + TN
+
+    accuracy = np.sum(correct_cells)/np.sum(total)
+    return accuracy
+
+def rss_loss(input, target):
     return th.sum((target - input) ** 2)
 
 def str2bool(v):
@@ -78,6 +82,8 @@ parser.add_argument('-filtering', dest='filtering', default=True, type=str2bool,
 parser.add_argument('-workers', dest='workers', default=4, type=int,
                     help='Dataloader threads')
 
+parser.add_argument('-dynamicity', dest='dynamicity', default=0.1, type=float,
+                    help='Filtering thershold in [0,1]')
 parser.add_argument('-otf', dest='otf', default=False, type=str2bool,
                     help='Use on the fly data loading')
 parser.add_argument('-caching', dest='caching', default=False, type=str2bool,
@@ -95,7 +101,9 @@ foldername = "train_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
 os.mkdir("runs/" + foldername)
 weights_path = "runs/" + foldername + "/model.weights"
 
-print("[!] Dest folder: {}".format("runs/" + foldername))
+print("[!] Session folder: {}".format("runs/" + foldername))
+
+writer = SummaryWriter("runs/" + foldername)
 
 # -------------------------------
 plotsize = 15
@@ -131,7 +139,7 @@ else:
         workers=args.workers,
         image_size=args.image_size,
         shuffle=False,
-        dynamicity=100,
+        dynamicity=args.dynamicity,
         caching=args.caching,
         downsampling=args.downsampling
     )
@@ -163,7 +171,8 @@ if th.cuda.device_count() > 1:
 net = net.to(device)
 
 # ---- Training time!
-optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
+optimizer = optim.Adam(net.parameters(), lr=args.learning_rate, weight_decay=1e-5) # L2, Ridge Regression
+# L1 Lasso Regression --> https://medium.com/analytics-vidhya/understanding-regularization-with-pytorch-26a838d94058
 losses = []
 avg_losses = []
 errors = []
@@ -171,6 +180,7 @@ test_errors = []
 print("\n[!] It's training time!")
 
 epochs = args.epochs
+plot_graph = False
 
 for epoch in range(epochs):  # loop over the dataset multiple times
 
@@ -180,8 +190,8 @@ for epoch in range(epochs):  # loop over the dataset multiple times
     query_times = []
     query_start = time.time()
 
-    iter_dataset = tqdm(dataset.train_dataloader())
-    for batch in iter_dataset:
+    iter_dataset = tqdm(enumerate(dataset.train_dataloader()), file=sys.stdout)
+    for i, batch in iter_dataset:
         query_end = time.time()
         query_times.append(query_end-query_start)
 
@@ -196,12 +206,21 @@ for epoch in range(epochs):  # loop over the dataset multiple times
         x = x.float().to(device)
         y = y.float().to(device)
 
+        # first time plot the graph
+        if not plot_graph:
+            writer.add_graph(net, x)
+            writer.close()
+            plot_graph = True
+
         # ---- Predicting
         start = time.time()
         outputs = net(x, args.future_frames)  # 0 for layer index, 0 for h index
 
+        center = outputs.shape[3]//3
+
         # ---- Batch Loss
-        loss = sse_loss(outputs[:, :args.out_channels, 0, :, :], y[:, 0, :args.out_channels, :, :])
+        loss = rss_loss(outputs[:, :args.out_channels, 0, center:2*center, center:2*center], y[:, 0, :args.out_channels, center:2*center, center:2*center])
+        acc = accuracy(outputs[:, :args.out_channels, 0, center:2*center, center:2*center], y[:, 0, :args.out_channels, center:2*center, center:2*center], threshold=1e-3)
 
         loss.backward()
         optimizer.step()
@@ -214,9 +233,19 @@ for epoch in range(epochs):  # loop over the dataset multiple times
 
         iter_dataset.set_postfix(
             loss=np.mean(losses),
+            accuracy=acc,
             fwd_time=np.mean(training_times),
             query_time=np.mean(query_times)
         )
+
+        writer.add_scalar('accuracy',
+                          acc,
+                          epoch*len(dataset.train_dataloader())+i)
+
+        if i % int(len(dataset.train_dataloader())*0.1) == 0:
+            writer.add_scalar('avg training loss',
+                              np.mean(losses),
+                              epoch)
 
     epoch_end = time.time()
     print("\navg.loss {:.2f}\ttook {:.2f} s\tavg. inference time {:.2f} s\tavg.query time/batch {:.2f} s"

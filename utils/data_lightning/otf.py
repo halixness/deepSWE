@@ -203,6 +203,7 @@ class DataPartitions():
 
         self.areas = os.listdir(self.root)
         self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
+        np.random.shuffle(self.areas)
 
         if self.partial is not None:
             self.areas = self.areas[:int(len(self.areas) * self.partial)]

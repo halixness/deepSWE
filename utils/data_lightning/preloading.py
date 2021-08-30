@@ -166,6 +166,7 @@ class DataPartitions():
 
         self.areas = os.listdir(self.root)
         self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
+        np.random.shuffle(self.areas)
 
         if self.partial is not None:
             self.areas = self.areas[:int(len(self.areas) * self.partial)]
@@ -223,6 +224,7 @@ class DataGenerator():
 
         self.batch_size = batch_size
         self.blurry_filter_size = (3, 3)
+        self.downsampling_factor = 4
         self.downsampling = downsampling
 
         self.root = root
@@ -259,7 +261,7 @@ class DataGenerator():
             # For each sequence
             loaded = 0
 
-            print("Area {} ".format(area_index), end="", flush=True)
+            print("Area {} - sequences: {}\n".format(area_index, len(area[1])), end="", flush=True)
             for i, sequence in enumerate(area[1]):
 
                 # --- BTM
@@ -272,6 +274,7 @@ class DataGenerator():
                 # --- Preprocessing
                 if self.downsampling:
                     btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
+                    btm = cv.pyrDown(btm)
                     btm = cv.pyrDown(btm)
 
                 # riduzione valori il sottraendo minimo
@@ -336,6 +339,7 @@ class DataGenerator():
                         # --- On-spot Gaussian Blurring
                         if self.downsampling:
                             frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)
+                            frame = cv.pyrDown(frame)
                             frame = cv.pyrDown(frame)
 
                         matrices.append(frame)

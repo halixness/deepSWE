@@ -24,6 +24,18 @@ mat.use("Agg") # headless mode
 
 # -------------- Functions
 
+def accuracy(prediction, target, threshold = 1e-2):
+
+    total = (target * prediction).cpu().detach().numpy()
+    total = np.array(total > 0).astype(int) # TP + TN + FP + FN
+
+    diff = np.abs((target - prediction).cpu().detach().numpy())
+    correct_cells = (diff < threshold).astype(int)
+    correct_cells = correct_cells*total # TP + TN
+
+    accuracy = np.sum(correct_cells)/np.sum(total)
+    return accuracy
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -126,6 +138,7 @@ l1 = th.nn.L1Loss()
 l2 = th.nn.MSELoss()
 
 ssim_score = 0
+acc_score = 0
 l1_score = 0
 l2_score = 0
 
@@ -162,14 +175,18 @@ for t in range(args.n_tests):
     end = time.time()
     inference_times.append(end - start)
 
-    # 1, c, h, w
-    img1 = Variable(outputs[0, :, 0, :, :].unsqueeze(0), requires_grad=False)
-    img2 = Variable(y[0, 0, :, :, :].unsqueeze(0), requires_grad=True)
+    center = outputs.shape[3] // 3
 
+    # 1, c, h, w
+    img1 = Variable(outputs[0, :, 0, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=False)
+    img2 = Variable(y[0, 0, :, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=True)
+
+    curr_acc = accuracy(img1, img2, threshold=1e-1)
     curr_ssim = ssim(img1, img2)
     curr_l1 = l1(img1, img2)
     curr_l2 = l2(img1, img2)
 
+    acc_score += curr_acc
     ssim_score += curr_ssim
     l1_score += curr_l1
     l2_score += curr_l2
@@ -223,7 +240,7 @@ for t in range(args.n_tests):
 
     # Write stats
     text_file = open("runs/" + foldername + "/test_{}/scores.txt".format(t), "w")
-    n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(curr_ssim, curr_l1, curr_l2))
+    n = text_file.write("Accuracy:{}\nSSIM: {}\nL1: {}\nMSE:{}".format(curr_acc,curr_ssim, curr_l1, curr_l2))
     text_file.close()
 
     del x
@@ -233,12 +250,13 @@ for t in range(args.n_tests):
     th.cuda.empty_cache()
     # ----------------
 
+acc_score = acc_score/args.n_tests
 ssim_score = ssim_score/args.n_tests
 l1_score = l1_score/args.n_tests
 l2_score = l2_score/args.n_tests
 
-stats = "SSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(ssim_score, l1_score, l2_score, np.mean(inference_times))
+stats = "Accuracy: {}\nSSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(acc_score, ssim_score, l1_score, l2_score, np.mean(inference_times))
 
 text_file = open("runs/" + foldername + "/avg_score.txt", "w")
-n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
+n = text_file.write(stats)
 text_file.close()
