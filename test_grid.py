@@ -50,6 +50,8 @@ def str2bool(v):
 parser = argparse.ArgumentParser(description='Tests a train model against a given dataset')
 
 
+parser.add_argument('-accuracy_threshold', dest='accuracy_threshold', default = 1e-1, type=float,
+                    help='Delta threshold to consider true positives, [0,1] ')
 parser.add_argument('-network', dest='network', default = "conv",
                     help='Type of architecture: conv/nfnet/...')
 parser.add_argument('-test_size', dest='test_size', default = None,
@@ -80,6 +82,8 @@ parser.add_argument('-batch_size', dest='batch_size', default=4, type=int,
                     help='batch size')
 parser.add_argument('-dynamicity', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')
+parser.add_argument('-downsampling', dest='downsampling', default=False, type=str2bool,
+                    help='Use 4xdownsampling')
 
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
@@ -147,7 +151,8 @@ dataset = SWEDataset(
     past_frames=args.past_frames, 
     future_frames=args.future_frames, 
     partial=args.partial,
-    dynamicity=args.dynamicity
+    dynamicity=args.dynamicity,
+    downsampling=args.downsampling
 )
 
 for t in range(args.n_tests):

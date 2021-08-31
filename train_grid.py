@@ -92,7 +92,7 @@ parser.add_argument('-otf', dest='otf', default=False, type=str2bool,
 parser.add_argument('-caching', dest='caching', default=False, type=str2bool,
                     help='Use cache in dataloader')
 parser.add_argument('-downsampling', dest='downsampling', default=False, type=str2bool,
-                    help='Use 2xdownsampling')
+                    help='Use 4xdownsampling')
 
 args = parser.parse_args()
    
@@ -242,7 +242,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
             x_test = x_test.float().to(device)
             y_test = y_test.float().to(device)
             test_outputs = net(x_test, 1)
-            test_acc = accuracy(test_outputs[:, :3, 0, :, :], y_test[:, 0, :3, :, :], threshold=args.accuracy_threshold)
+            test_acc = accuracy(test_outputs[:, :3, 0, center:2*center, center:2*center], y_test[:, 0, :3, center:2*center, center:2*center], threshold=args.accuracy_threshold)
 
             writer.add_scalars('accuracy', {'train': acc,
                                             'test': test_acc,
