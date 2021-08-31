@@ -175,7 +175,7 @@ if th.cuda.device_count() > 1:
 net = net.to(device)
 
 # ---- Training time!
-optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate, weight_decay=1e-2) # L2, Ridge Regression
+optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate, weight_decay=1e-5) # L2, Ridge Regression
 # L1 Lasso Regression --> https://medium.com/analytics-vidhya/understanding-regularization-with-pytorch-26a838d94058
 losses = []
 avg_losses = []
