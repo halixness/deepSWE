@@ -21,9 +21,9 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='Trains a given model on a given dataset')
 
-parser.add_argument('-test_size', dest='test_size', default = 0.1,
+parser.add_argument('-test_size', dest='test_size', default = 0.1, type=float,
                     help='Test size for the split')
-parser.add_argument('-val_size', dest='val_size', default = 0.1,
+parser.add_argument('-val_size', dest='val_size', default = 0.1, type=float,
                     help='Validation size for the split')
 parser.add_argument('-root', dest='root',
                     help='root path with the simulation files (cropped and stored in folders)')

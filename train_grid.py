@@ -22,10 +22,11 @@ mat.use("Agg") # headless mode
 # -------------- Functions
 
 def accuracy(prediction, target, threshold = 1e-2):
-
+    # totale celle bagnate del fiume nel target
     total = (target * prediction).cpu().detach().numpy()
     total = np.array(total > 0).astype(int) # TP + TN + FP + FN
 
+    # totale celle bagnate del fiume nella previsione
     diff = np.abs((target - prediction).cpu().detach().numpy())
     correct_cells = (diff < threshold).astype(int)
     correct_cells = correct_cells*total # TP + TN
@@ -174,7 +175,7 @@ if th.cuda.device_count() > 1:
 net = net.to(device)
 
 # ---- Training time!
-optimizer = optim.Adam(net.parameters(), lr=args.learning_rate, weight_decay=1e-5) # L2, Ridge Regression
+optimizer = optim.AdamW(net.parameters(), lr=args.learning_rate, weight_decay=1e-2) # L2, Ridge Regression
 # L1 Lasso Regression --> https://medium.com/analytics-vidhya/understanding-regularization-with-pytorch-26a838d94058
 losses = []
 avg_losses = []
