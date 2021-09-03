@@ -271,6 +271,10 @@ class DataGenerator():
                     raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
                 btm = iter_loadtxt(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0], delimiter=" ")
 
+                # --- Outliers
+                btm[np.isnan(btm)] = 0
+                btm[btm > 10e5] = 0
+
                 # --- Preprocessing
                 if self.downsampling:
                     btm = cv.GaussianBlur(btm, self.blurry_filter_size, 0)
@@ -336,6 +340,10 @@ class DataGenerator():
                                 self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,
                                                                                                            k, ext), delimiter=" ")
 
+                        # --- Outliers
+                        frame[np.isnan(frame)] = 0
+                        frame[frame > 10e5] = 0
+                        
                         # --- On-spot Gaussian Blurring
                         if self.downsampling:
                             frame = cv.GaussianBlur(frame, self.blurry_filter_size, 0)

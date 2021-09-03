@@ -52,8 +52,8 @@ parser = argparse.ArgumentParser(description='Tests a train model against a give
 
 parser.add_argument('-accuracy_threshold', dest='accuracy_threshold', default = 1e-1, type=float,
                     help='Delta threshold to consider true positives, [0,1] ')
-parser.add_argument('-network', dest='network', default = "conv",
-                    help='Type of architecture: conv/nfnet/...')
+parser.add_argument('-blur_radius', dest='blur_radius', default = 3, type=int,
+                    help='Blur radius for downsampling')
 parser.add_argument('-test_size', dest='test_size', default = None,
                     help='Test size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
@@ -125,7 +125,7 @@ if args.multigpu:
     net = nn.DataParallel(net)
 
 net.load_state_dict(
-    th.load(args.weights_path)
+    th.load(args.weights_path, map_location=device)
 )
 
 net = net.to(device)
@@ -152,8 +152,11 @@ dataset = SWEDataset(
     future_frames=args.future_frames, 
     partial=args.partial,
     dynamicity=args.dynamicity,
-    downsampling=args.downsampling
+    downsampling=args.downsampling,
+    blur_radius=args.blur_radius
 )
+
+observed = []
 
 for t in range(args.n_tests):
 
@@ -162,9 +165,11 @@ for t in range(args.n_tests):
     i = np.random.randint(len(dataset))       # random batch
     datapoint = dataset[i]
 
-    while datapoint is None:
+    while datapoint is None and i not in observed:
         i = np.random.randint(len(dataset))       # random sequence
         datapoint = dataset[i]
+
+    observed.append(i)
 
     print("\t data loaded!", flush=True)
     
@@ -196,6 +201,8 @@ for t in range(args.n_tests):
     l1_score += curr_l1
     l2_score += curr_l2
 
+    max_val = np.max(y[0, 0, 0, :, :].cpu().detach().numpy())
+
     # ------------- Plotting
     test_dir = "runs/" + foldername + "/test_{}".format(t)
     os.mkdir(test_dir)
@@ -226,6 +233,7 @@ for t in range(args.n_tests):
     axs[i + 2].title.set_text('Ground Truth')
 
     plt.savefig(test_dir + "/sequence.png")
+    plt.close()
 
     # Saving single images
     plt.figure().clear()
@@ -234,14 +242,20 @@ for t in range(args.n_tests):
     plt.clf()
 
     for i, frame in enumerate(x[0]):
-        plt.matshow(frame[0].cpu().detach().numpy())
+        plt.matshow(frame[0].cpu().detach().numpy(), vmin=0, vmax=max_val)
+        plt.colorbar()
         plt.savefig(test_dir + "/{}.png".format(i))
+        plt.close()
 
-    plt.matshow(outputs[0,0,0,:,:].cpu().detach().numpy())
+    plt.matshow(outputs[0,0,0,:,:].cpu().detach().numpy(), vmin=0, vmax=max_val)
+    plt.colorbar()
     plt.savefig(test_dir + "/predicted.png")
+    plt.close()
 
-    plt.matshow(y[0, 0, 0, :, :].cpu().detach().numpy())
+    plt.matshow(y[0, 0, 0, :, :].cpu().detach().numpy(), vmin=0, vmax=max_val)
+    plt.colorbar()
     plt.savefig(test_dir + "/ground_truth.png")
+    plt.close()
 
     # Write stats
     text_file = open("runs/" + foldername + "/test_{}/scores.txt".format(t), "w")

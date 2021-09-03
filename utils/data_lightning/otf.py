@@ -29,7 +29,7 @@ def iter_loadtxt(filename, delimiter=',', skiprows=0, dtype=float):
 class SWEDataModule(pl.LightningDataModule):
 
     def __init__(self, root, past_frames, future_frames, caching=False, dynamicity=100, shuffle=True, image_size=768, batch_size=4,
-                 downsampling=False, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
+                 blur_radius=3, downsampling=False, workers=4, filtering=True, test_size=0.1, val_size=0.1, partial=None):
         super(SWEDataModule, self).__init__()
 
         self.test_size = test_size
@@ -46,6 +46,7 @@ class SWEDataModule(pl.LightningDataModule):
         self.dynamicity = dynamicity
         self.caching = caching
         self.downsampling = downsampling
+        self.blur_radius=blur_radius
         
     def prepare_data(self):
 
@@ -59,7 +60,8 @@ class SWEDataModule(pl.LightningDataModule):
             shuffle=self.shuffle,
             dynamicity=self.dynamicity,
             caching=self.caching,
-            downsampling=self.downsampling
+            downsampling=self.downsampling,
+            blur_radius=self.blur_radius,
         )
 
         test_len = int(len(dataset) * self.test_size)
@@ -85,7 +87,7 @@ class SWEDataModule(pl.LightningDataModule):
 
 class SWEDataset(Dataset):
     def __init__(self, past_frames, future_frames, root, shuffle=True, caching=False, filtering=True, image_size=256, batch_size=4, dynamicity=1e-3,
-                 buffer_memory=100, buffer_size=1000, downsampling=False, partial=None):
+                 blur_radius=3, buffer_memory=100, buffer_size=1000, downsampling=False, partial=None):
         ''' Initiates the dataloading process '''
 
         self.filtering = filtering
@@ -108,6 +110,7 @@ class SWEDataset(Dataset):
             buffer_size=buffer_size,
             buffer_memory=buffer_memory,
             downsampling=downsampling,
+            blur_radius=blur_radius,
             dynamicity=dynamicity,
             caching=caching
         )
@@ -235,7 +238,7 @@ class DataPartitions():
 # ------------------------------------------------------------------------------
 class DataGenerator():
     def __init__(self, root, dataset_partitions, past_frames, future_frames, input_dim, output_dim,
-                 buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False, dynamicity=1e-3):
+                 blur_radius=3, buffer_memory=1e2, buffer_size=1e3, batch_size=16, caching=True, downsampling=False, dynamicity=1e-3):
         '''
             Data Generator
             Inputs:
@@ -256,7 +259,7 @@ class DataGenerator():
         self.caching = caching
 
         self.batch_size = batch_size
-        self.blurry_filter_size = (3, 3)
+        self.blurry_filter_size = (blur_radius, blur_radius)
         self.downsampling_factor = 4
         self.downsampling = downsampling
 
@@ -295,6 +298,10 @@ class DataGenerator():
         if len(btm_filenames) == 0:
             raise Exception("No BTM map found for the area {}".format(self.dataset_partitions[area_index][0]))
         btm = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/" + btm_filenames[0],' ',header=None).values
+
+        # --- Outliers
+        btm[np.isnan(btm)] = 0
+        btm[btm > 10e5] = 0
 
         # --- Preprocessing
         if self.downsampling:
@@ -354,6 +361,10 @@ class DataGenerator():
                 # ----- No cache
                 else:
                     frame = pd.read_csv(self.root + self.dataset_partitions[area_index][0] + "/{}{:04d}.{}".format(dep_filename,k, ext), ' ', header=None).values
+
+                # --- Filtering
+                frame[np.isnan(frame)] = 0
+                frame[frame > 10e5] = 0
 
                 # --- On-spot Gaussian Blurring
                 if self.downsampling:
