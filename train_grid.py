@@ -254,6 +254,11 @@ for epoch in range(epochs):  # loop over the dataset multiple times
                               acc,
                               epoch * len(dataset.train_dataloader()) + i)
 
+        # Item loss
+        writer.add_scalar('training loss',
+                              loss.item(),
+                              epoch)
+
         # Plot values
         if i % 3:
             writer.add_scalar('avg training loss',
