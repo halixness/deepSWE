@@ -164,8 +164,8 @@ class DataPartitions():
         self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
         
         # Shuffle all the areas
-+        if self.shuffle:
-+            np.random.shuffle(self.areas)
+        if self.shuffle:
+            np.random.shuffle(self.areas)
 
         if self.partial is not None:
             self.areas = self.areas[:int(len(self.areas) * self.partial)]
