@@ -42,7 +42,12 @@ class Preprocessing():
 
         return max_diff, max_diff >= threshold
 
-    def eval_datapoint_diff(self, X, Y, threshold, grid_size=3):
+    def filter(self, tensor):
+        tensor[np.isnan(tensor)] = 0
+        tensor[tensor > 10e5] = 0
+        return tensor
+
+    def eval_datapoint_diff(self, X, Y, threshold, sensibility=0.1, grid_size=3):
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic"
         '''
         center = int(X.shape[1] / grid_size)
@@ -50,24 +55,34 @@ class Preprocessing():
         end = 2 * center
 
         # compares the % difference between last and first frame
-        first_frame = X[0, start:end, start:end, 0]
+        first_frame = self.filter(X[0, start:end, start:end, 0])
 
         # Difference between first frame and any in the output
         deltas = []
+
         for frame in Y:
-            deltas.append(
-                np.sum(np.abs(frame[start:end, start:end, 0] - first_frame))
-            )
+            current_frame = self.filter(frame[start:end, start:end, 0])
 
-        # Filtering
-        tot_sum = np.sum(np.abs(frame[start:end, start:end, 0]))
-        if tot_sum > 0:  # if the last frame is not empty
-            deltas = np.array(deltas) / tot_sum
-            deltas = deltas[deltas > threshold]
-        else:
-            deltas = np.array([])
+            wet_cells = (current_frame * first_frame) # conjunction
+            wet_cells = np.array(wet_cells > 0).astype(int) # total wet cells
 
-        return deltas, deltas.shape[0] > 0
+            # totale celle bagnate del fiume nella previsione
+            diff = np.abs((current_frame - first_frame))
+            similar_cells = (diff < sensibility).astype(int)
+            similar_cells = similar_cells*wet_cells # conjuction
+
+            similarity = (np.sum(similar_cells)/np.sum(wet_cells))
+
+            if np.isnan(similarity):
+                similarity = 1
+
+            distance = 1 - similarity
+
+            # Only one has to satisfy the condition
+            if distance >= threshold:
+                return True
+
+        return False
 
     def eval_datapoint(self, X, Y, threshold=1e-1):
         ''' Returns false/true if the given sequence of frames is "sufficiently dynamic"

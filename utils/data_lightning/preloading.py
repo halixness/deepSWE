@@ -404,7 +404,7 @@ class DataGenerator():
 
                 # filtering
                 if self.filtering:
-                    score, valid = self.preprocessing.eval_datapoint(x[:, :, :, :3], y, self.dynamicity)
+                    valid = self.preprocessing.eval_datapoint(x[:, :, :, :3], y, self.dynamicity)
                 else:
                     valid = True
 
