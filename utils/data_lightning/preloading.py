@@ -153,10 +153,6 @@ class DataPartitions():
         ''' Returns test dataset partitions
             Partitions: [(ids_x(x, 10), ids_y(x, 4))]
         '''
-
-        # Shuffle areas
-        if self.shuffle:
-            np.random.shuffle(self.dataset_partitions)
         return self.dataset_partitions
 
     def create_partitions(self):
@@ -166,7 +162,10 @@ class DataPartitions():
 
         self.areas = os.listdir(self.root)
         self.areas = [x for x in sorted(self.areas) if x.startswith("mini-") and os.path.isdir(self.root + x)]
-        np.random.shuffle(self.areas)
+        
+        # Shuffle all the areas
++        if self.shuffle:
++            np.random.shuffle(self.areas)
 
         if self.partial is not None:
             self.areas = self.areas[:int(len(self.areas) * self.partial)]
@@ -191,7 +190,7 @@ class DataPartitions():
                 labels["id-{}".format(i)] = list(
                     range(i + (self.past_frames), i + (self.past_frames) + (self.future_frames)))
 
-            # Shuffle sequences
+            # Shuffle all sequences
             if self.shuffle:
                 np.random.shuffle(partition_raw)
 
