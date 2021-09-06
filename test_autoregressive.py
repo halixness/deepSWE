@@ -22,6 +22,18 @@ mat.use("Agg") # headless mode
 
 # -------------- Functions
 
+def accuracy(prediction, target, threshold = 1e-2):
+
+    total = (target * prediction).cpu().detach().numpy()
+    total = np.array(total > 0).astype(int) # TP + TN + FP + FN
+
+    diff = np.abs((target - prediction).cpu().detach().numpy())
+    correct_cells = (diff < threshold).astype(int)
+    correct_cells = correct_cells*total # TP + TN
+
+    accuracy = np.sum(correct_cells)/np.sum(total)
+    return accuracy
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -53,18 +65,17 @@ def reverse_ssim(y, y_true):
 
 parser = argparse.ArgumentParser(description='Tests a train model against a given dataset')
 
-
-parser.add_argument('-network', dest='network', default = "conv",
-                    help='Type of architecture: conv/nfnet/...')
+parser.add_argument('-accuracy_threshold', dest='accuracy_threshold', default = 1e-1, type=float,
+                    help='Delta threshold to consider true positives, [0,1] ')
+parser.add_argument('-blur_radius', dest='blur_radius', default = 3, type=int,
+                    help='Blur radius for downsampling')
 parser.add_argument('-test_size', dest='test_size', default = None,
                     help='Test size for the split')
 parser.add_argument('-shuffle', dest='shuffle', default=True, type=str2bool,
                     help='Shuffle the dataset')
-parser.add_argument('-tf', dest='test_flight',
-                    help='Test flight. Avoids creating a train folder for this session.')
-parser.add_argument('-npy', dest='numpy_file',
-                    help='path to a npy stored dataset')
-parser.add_argument('-hidden_layers', dest='hidden_layers', default=4, type=int,
+parser.add_argument('-multigpu', dest='multigpu', default=False, type=str2bool,
+                    help='Supports multi-gpu models')
+parser.add_argument('-filters', dest='filters', default=4, type=int,
                     help='number of hidden layers')
 parser.add_argument('-in_channels', dest='in_channels', default=4, type=int,
                     help='number of input channels')
@@ -72,52 +83,42 @@ parser.add_argument('-out_channels', dest='out_channels', default=3, type=int,
                     help='number of input channels')                    
 parser.add_argument('-tests', dest='n_tests', default=10, type=int,
                     help='number of tests to perform')
-parser.add_argument('-weights', dest='weights_path',
+parser.add_argument('-weights', dest='weights_path', required=True,
                     help='model weights for testing')
 parser.add_argument('-dset', dest='dataset_path',
                     help='path to a npy stored dataset')
-parser.add_argument('-root', dest='root',
+parser.add_argument('-root', dest='root', required=True,
                     help='root path with the simulation files (cropped and stored in folders)')
+parser.add_argument('-partial', dest='partial', default=None, type=float,
+                    help='percentage of portion of dataset (to load partial, lighter chunks)')
+parser.add_argument('-image_size', dest='image_size', default=256, type=int,
+                    help='image size (width = height)')
+parser.add_argument('-batch_size', dest='batch_size', default=4, type=int,
+                    help='batch size')
+parser.add_argument('-dynamicity', dest='dynamicity', default=1e-1, type=float,
+                    help='dynamicity rate (to filter out "dynamic" sequences)')
+parser.add_argument('-downsampling', dest='downsampling', default=False, type=str2bool,
+                    help='Use 4xdownsampling')
+parser.add_argument('-future_frames', dest='future_frames', default=1, type=int, 
+                    help='number of future frames')
+
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
                     help='number of past frames')       
-parser.add_argument('-ffuture_frames', dest='future_frames', default=1, type=int, 
-                    help='number of future frames')       
-parser.add_argument('-partial', dest='partial', default=None, type=float,
-                    help='percentage of portion of dataset (to load partial, lighter chunks)')                                                            
-parser.add_argument('-i', dest='image_size', default=256, type=int,
-                    help='image size (width = height)')
-parser.add_argument('-b', dest='batch_size', default=4, type=int,
-                    help='batch size') 
-parser.add_argument('-d', dest='dynamicity', default=1e-3, type=float,
-                    help='dynamicity rate (to filter out "dynamic" sequences)')                                                                                                  
 parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
                     help='size of the cache memory (in entries)')
 parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
                     help='temporal length of the cache memory (in iterations)')                                                                                                  
-parser.add_argument('-ds', dest='downsampling', default=False, type=str2bool, nargs='?',
-                    const=True, help='enable 2x downsampling (with gaussian filter)')  
-parser.add_argument('-ls', dest='latent_size', default=1024, type=int,
-                    help='latent size for the VAE')                                                                                                                                                      
 
 args = parser.parse_args()
-
-if args.root is None and args.numpy_file is None:
-    print("required: please specify a root path: -r /path")
-    exit()
-
-if args.weights_path is None:
-    print("required: please specify a weights path: -weights /*.weights")
-    exit()
 
 print("[~] Benchmark initialized, loading dataset...")
 
 # -------------- Setting up the run
 
-if args.test_flight is None:
-    num_run = len(os.listdir("runs/")) + 1
-    now = datetime.now()
-    foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
-    os.mkdir("runs/" + foldername)
+num_run = len(os.listdir("runs/")) + 1
+now = datetime.now()
+foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
+os.mkdir("runs/" + foldername)
 
 # -------------- Data definition
 if th.cuda.is_available():
@@ -129,19 +130,18 @@ device = th.device(dev)
 plotsize = 15
 
 # -------------- Model
-if args.network == "conv":
-    net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device) # False: many to one
-elif args.network == "nfnet":
-    net = seq2seq_NFLSTM.EncoderDecoderConvLSTM(nf=args.hidden_layers, in_chan=args.in_channels, out_chan=args.out_channels).to(device)
-else:
-    raise Exception("Unkown network type given.")
+net = seq2seq_ConvLSTM.EncoderDecoderConvLSTM(nf=args.filters, in_chan=args.in_channels, out_chan=args.out_channels)
 
-# Loading model weights from previous training
-print("[~] Loading model weights")
+if args.multigpu:
+    net = nn.DataParallel(net)
+
 net.load_state_dict(
-    th.load(args.weights_path, map_location=th.device('cpu'))
+    th.load(args.weights_path, map_location=device)
 )
+
+net = net.to(device)
 net.eval() # evaluation mode
+
 
 print("[!] Successfully loaded weights from {}".format(args.weights_path))
 
@@ -156,12 +156,16 @@ l2 = th.nn.MSELoss()
 ssim_score = 0
 l1_score = 0
 l2_score = 0
+acc_score = 0
 
 dataset = SWEDataset(
     root=args.root,  
     past_frames=args.past_frames, 
     future_frames=args.future_frames, 
-    partial=args.partial
+    partial=args.partial,
+    dynamicity=args.dynamicity,
+    downsampling=args.downsampling,
+    blur_radius=args.blur_radius
 )
 
 
@@ -207,6 +211,7 @@ for s in range(args.future_frames):
     img1 = Variable(outputs[0,0,0].unsqueeze(0).unsqueeze(0), requires_grad=False)
     img2 = Variable(y[0,s,0].unsqueeze(0).unsqueeze(0), requires_grad=True)
 
+    acc_score += accuracy(img1, img2, threshold=1e-1)
     ssim_score += ssim(img1, img2)
     l1_score += l1(img1, img2)
     l2_score += l2(img1, img2)
@@ -226,14 +231,15 @@ for s in range(args.future_frames):
 
     print(". ", end="", flush=True)
 
+acc_score = acc_score/args.future_frames
 ssim_score = ssim_score/args.future_frames
 l1_score = l1_score/args.future_frames
 l2_score = l2_score/args.future_frames
 
-stats = "SSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(ssim_score, l1_score, l2_score, np.mean(inference_times))
+stats = "Accuracy: {}\nSSIM: {}\nL1: {}\nMSE:{}\nAvg.Inference Time: {}".format(acc_score, ssim_score, l1_score, l2_score, np.mean(inference_times))
 print(stats, flush=True)
 
 text_file = open("runs/" + foldername + "/avg_score.txt", "w")
-n = text_file.write("SSIM: {}\nL1: {}\nMSE:{}".format(ssim_score, l1_score, l2_score))
+n = text_file.write(stats)
 text_file.close()
 

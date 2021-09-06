@@ -7,3 +7,5 @@ __pycache__/
 lightning_logs/
 tb_logs/
 utils/__pycache__/
+.DS_Store
+__pycache__/
