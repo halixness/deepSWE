@@ -1,11 +1,14 @@
-<img src="logo.png" width="512"/>
+<img src="info/logo.png" width="512"/>
 A framework to learn Shallow Water Equations with Deep Neural Networks.
+<br/><br/>
+
+<img src="https://github.com/halixness/deepSWE/blob/main/info/prediction_2.gif" width="250" height="250"/> <img src="https://github.com/halixness/deepSWE/blob/main/info/prediction.gif" width="250" height="250"/> 
 
 ## Introduction
 
-This library aims to provide a framework to perform experiments on learning Navier Stokes equations to predict flooding scenarios with deep neural networks.
+This framework aims to provide tools for experiments on physics-informed deep neural networks. It stems from the research conducted at the University of Parma from the group of prof. Alessandro Dal Palú, in collaboration with the [HyLab research team](http://www.hylab.unipr.it/it/). 
 
-- [Wiki (Italian)](https://github.com/halixness/deepSWE/wiki)
+- [Wiki (in Italian)](https://github.com/halixness/deepSWE/wiki)
 - [Experiments](https://github.com/halixness/deepSWE/tree/main/runs)
 - [Models](https://github.com/halixness/deepSWE/tree/main/models)
 
