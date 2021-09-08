@@ -2,7 +2,7 @@
 A framework to learn Shallow Water Equations with Deep Neural Networks.
 <br/><br/>
 
-<img src="https://github.com/halixness/deepSWE/blob/main/info/prediction_2.gif" width="250" height="250"/> <img src="https://github.com/halixness/deepSWE/blob/main/info/prediction.gif" width="250" height="250"/> 
+<img src="https://github.com/halixness/deepSWE/blob/main/info/prediction_2.gif" width="250" height="250"/> <img src="https://github.com/halixness/deepSWE/blob/main/info/prediction_baganza.gif" width="250" height="250"/> 
 
 ## Introduction
 
