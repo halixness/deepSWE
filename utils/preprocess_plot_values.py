@@ -12,16 +12,16 @@ args = parser.parse_args()
 
 df = pd.read_csv(args.path)
 
-TSBOARD_SMOOTHING = 0.7
-#df.ewm(alpha=(1 - TSBOARD_SMOOTHING))
-print(df)
+# Cleaning and smoothing
+TSBOARD_SMOOTHING = 0.9
+# = df["Step"]
+#df = df.drop(columns=["Wall time", "Step"])
+df = df.ewm(alpha=(1 - TSBOARD_SMOOTHING)).mean()
 
+# Saving to file
 parts = args.path.split("/")
 parts[-1] = "smooth_" + parts[-1]
 df.to_csv("/".join(parts))
 
-df.plot()
-plt.show()
-
-while True:
-    pass
+#df.plot()
+#plt.show()

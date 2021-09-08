@@ -1,5 +1,6 @@
 **/references
 **/runs/*
+**/lightning_logs/*
 **/__pycache__/*
 **/SWE_*
 __pycache__/
