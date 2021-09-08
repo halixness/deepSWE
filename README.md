@@ -21,24 +21,27 @@ Two scripts are available to either train or test the model:
 
 ### Training
 
-Loads a .npy dataset and performs training:
+You can use `python train.py -h` to check out the parameters.
+Load a dataset from disk (PARFLOOD format), filter dynamic sequences and train deepSWE@32 filters:
 ```
-python train.py -dset arda_dataset.npy -epochs 100 -lr 0.001
+python train.py -root /path -epochs 200 -future_frames 4 -filters 32 -dynamicity 0.5
 ```
 
 ### Testing
 
-Loads a .npy dataset and performs training:
+You can use `python test.py -h` to check out the parameters.
+Load a dataset from disk (PARFLOOD format), filter dynamic sequences, train deepSWE@32 filters and apply 5cm of approximation for the accuracy:
 ```
-python test.py -dset arda_dataset.npy -weights model.weights
+python test.py -root /path -weights model.weights -filters 32 -dynamicity 0.5 -accuracy_threshold 0.05
 ```
 
-**Please note:** the latent space size, defined with `-ls`, must be compatible with the latent space size defined during the training phase (thus the network weights).
+**Please note:** the network hyperparameters (filters, lr) in the test script, must be compatible with the ones used during training.
 
 
 ## Credits
 
-- [julianstastny/VAE-ResNet18-PyTorch](https://github.com/julianstastny/VAE-ResNet18-PyTorch)
-- [thunil/Deep-Flow-Prediction](https://github.com/thunil/Deep-Flow-Prediction)
+- [ndrplz/ConvLSTM_pytorch](https://github.com/ndrplz/ConvLSTM_pytorch)
 - [Po-Hsun-Su/pytorch-ssim](https://github.com/Po-Hsun-Su/pytorch-ssim)
+- [Andreas Holm Nielsen](https://holmdk.github.io/)
+
 
