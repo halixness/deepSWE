@@ -26,7 +26,6 @@ with imageio.get_writer(filename, mode='I') as writer:
     root = args.path
     files = os.listdir(args.path)
     frames = [x for x in sorted(files) if x.startswith(args.prefix) and os.path.isfile(root + x)]
-    
     for filename in frames:
         image = imageio.imread(root + filename)
         # Building gif

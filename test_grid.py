@@ -84,11 +84,11 @@ parser.add_argument('-dynamicity', dest='dynamicity', default=1e-1, type=float,
                     help='dynamicity rate (to filter out "dynamic" sequences)')
 parser.add_argument('-downsampling', dest='downsampling', default=False, type=str2bool,
                     help='Use 4xdownsampling')
+parser.add_argument('-future_frames', dest='future_frames', default=1, type=int,
+                    help='number of future frames')
 
 parser.add_argument('-p', dest='past_frames', default=4, type=int,
-                    help='number of past frames')       
-parser.add_argument('-f', dest='future_frames', default=1, type=int, 
-                    help='number of future frames')
+                    help='number of past frames')
 parser.add_argument('-bs', dest='buffer_size', default=1e3, type=float,
                     help='size of the cache memory (in entries)')
 parser.add_argument('-t', dest='buffer_memory', default=100, type=int,
@@ -181,18 +181,24 @@ for t in range(args.n_tests):
 
     start = time.time()
     # 1, t, c, h, w 
-    outputs = net(x, 1)
+    outputs = net(x, args.future_frames)
     end = time.time()
     inference_times.append(end - start)
 
     center = outputs.shape[3] // 3
+    outputs = outputs.permute(0, 2, 1, 3, 4)
 
     # 1, c, h, w
-    img1 = Variable(outputs[0, :, 0, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=False)
-    img2 = Variable(y[0, 0, :, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=True)
+    img1 = Variable(outputs[0, :, :, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=False)
+    img2 = Variable(y[0, :, :, center:2 * center, center:2 * center].unsqueeze(0), requires_grad=True)
+
+    # avg. SSIM
+    curr_ssim = 0
+    for i in range(args.future_frames):
+        curr_ssim += ssim(img1[:,i], img2[:,i])
+    curr_ssim = curr_ssim/args.future_frames
 
     curr_acc = accuracy(img1, img2, threshold=1e-1)
-    curr_ssim = ssim(img1, img2)
     curr_l1 = l1(img1, img2)
     curr_l2 = l2(img1, img2)
 
@@ -201,12 +207,29 @@ for t in range(args.n_tests):
     l1_score += curr_l1
     l2_score += curr_l2
 
-    max_val = np.max(y[0, 0, 0, :, :].cpu().detach().numpy())
+    max_val = np.max(y[0, :, 0, :, :].cpu().detach().numpy())
 
     # ------------- Plotting
     test_dir = "runs/" + foldername + "/test_{}".format(t)
     os.mkdir(test_dir)
 
+    # Past frames
+    for i, frame in enumerate(x[0]):
+        plt.matshow(frame[0].cpu().detach().numpy())
+        plt.savefig(test_dir + "/{}.png".format(i))
+        plt.close()
+
+    for i, frame in enumerate(outputs[0]):
+        # pred
+        plt.matshow(frame[0].cpu().detach().numpy())
+        plt.savefig(test_dir + "/pred_{}.png".format(i))
+        plt.close()
+        # true
+        plt.matshow(y[0,i,0].cpu().detach().numpy())
+        plt.savefig(test_dir + "/true_{}.png".format(i))
+        plt.close()
+
+    # ------------- Sequence
     fig, axs = plt.subplots(1, x.shape[1] + 2, figsize=(plotsize, plotsize))
 
     for ax in axs:
@@ -240,22 +263,6 @@ for t in range(args.n_tests):
     plt.close()
     plt.cla()
     plt.clf()
-
-    for i, frame in enumerate(x[0]):
-        plt.matshow(frame[0].cpu().detach().numpy(), vmin=0, vmax=max_val)
-        plt.colorbar()
-        plt.savefig(test_dir + "/{}.png".format(i))
-        plt.close()
-
-    plt.matshow(outputs[0,0,0,:,:].cpu().detach().numpy(), vmin=0, vmax=max_val)
-    plt.colorbar()
-    plt.savefig(test_dir + "/predicted.png")
-    plt.close()
-
-    plt.matshow(y[0, 0, 0, :, :].cpu().detach().numpy(), vmin=0, vmax=max_val)
-    plt.colorbar()
-    plt.savefig(test_dir + "/ground_truth.png")
-    plt.close()
 
     # Write stats
     text_file = open("runs/" + foldername + "/test_{}/scores.txt".format(t), "w")

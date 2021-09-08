@@ -121,10 +121,7 @@ foldername = "eval_{}_{}".format(num_run, now.strftime("%d_%m_%Y_%H_%M_%S"))
 os.mkdir("runs/" + foldername)
 
 # -------------- Data definition
-if th.cuda.is_available():
-    dev = "cuda:0"
-else:
-    dev = "cpu"
+dev = "cpu"
 device = th.device(dev)
 
 plotsize = 15
@@ -200,11 +197,11 @@ for s in range(args.future_frames):
 
     # Saves plot
     plt.matshow(outputs[0,0,0].cpu().detach().numpy())
-    plt.savefig(test_dir + "/pred_{}.png".format(s))
+    plt.savefig(test_dir + "/pred_{:02d}.png".format(s))
     plt.clf()
     
     plt.matshow(y[0,s,0].cpu().detach().numpy())
-    plt.savefig(test_dir + "/true_{}.png".format(s))
+    plt.savefig(test_dir + "/true_{:02d}.png".format(s))
     plt.clf()
 
     # 1, c, h, w
